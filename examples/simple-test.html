@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple WASM Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Simple libimagequant WASM Test</h1>
+    
+    <div id="status" class="status info">Initializing...</div>
+    
+    <div>
+        <canvas id="original" width="100" height="100"></canvas>
+        <span>→</span>
+        <canvas id="quantized" width="100" height="100"></canvas>
+    </div>
+    
+    <div id="results"></div>
+
+    <script type="module">
+        async function runTest() {
+            const statusDiv = document.getElementById('status');
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                statusDiv.textContent = 'Loading WASM module...';
+                
+                // Import and initialize the WASM module
+                const wasmModule = await import('../dist/wasm/libimagequant_wasm.js');
+                await wasmModule.default(); // Initialize the WASM module
+                const { ImageQuantizer } = wasmModule;
+                
+                statusDiv.textContent = 'Creating test image...';
+                
+                // Create a simple test image
+                const canvas = document.getElementById('original');
+                const ctx = canvas.getContext('2d');
+                
+                // Create a colorful gradient
+                for (let x = 0; x < 100; x++) {
+                    for (let y = 0; y < 100; y++) {
+                        const r = Math.floor((x / 100) * 255);
+                        const g = Math.floor((y / 100) * 255);
+                        const b = Math.floor(((x + y) / 200) * 255);
+                        
+                        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+                
+                statusDiv.textContent = 'Running quantization...';
+                
+                // Get image data
+                const imageData = ctx.getImageData(0, 0, 100, 100);
+                
+                // Create quantizer
+                const quantizer = new ImageQuantizer();
+                quantizer.setMaxColors(16); // Reduce to 16 colors
+                quantizer.setSpeed(3);
+                
+                // Quantize
+                const result = quantizer.quantizeImage(imageData.data, 100, 100);
+                
+                statusDiv.textContent = 'Displaying results...';
+                statusDiv.className = 'status success';
+                
+                // Get results
+                const palette = result.getPalette();
+                const quality = result.getQuantizationQuality();
+                const paletteLength = result.getPaletteLength();
+                
+                // Display quantized image
+                statusDiv.textContent = 'Rendering quantized image...';
+                
+                // Get the remapped image data (now returns RGBA directly)
+                const quantizedRgbaData = result.remapImage(imageData.data, 100, 100);
+                
+                // Debug: Check data length
+                console.log('Original data length:', imageData.data.length);
+                console.log('Quantized data length:', quantizedRgbaData.length);
+                console.log('Expected length for 100x100 RGBA:', 100 * 100 * 4);
+                
+                // Display on canvas
+                const quantizedCanvas = document.getElementById('quantized');
+                const quantizedCtx = quantizedCanvas.getContext('2d');
+                quantizedCanvas.width = 100;
+                quantizedCanvas.height = 100;
+                
+                // Ensure we have the right data length
+                if (quantizedRgbaData.length !== 100 * 100 * 4) {
+                    throw new Error(`Data length mismatch: got ${quantizedRgbaData.length}, expected ${100 * 100 * 4}`);
+                }
+                
+                const quantizedImageData = new ImageData(quantizedRgbaData, 100, 100);
+                quantizedCtx.putImageData(quantizedImageData, 0, 0);
+                
+                resultsDiv.innerHTML = `
+                    <h3>Quantization Results:</h3>
+                    <p>Original colors: ~10,000 (24-bit)</p>
+                    <p>Quantized colors: ${paletteLength}</p>
+                    <p>Quality: ${Math.round(quality * 100)}%</p>
+                    <p>Palette (first 8 colors): ${JSON.stringify(Array.from(palette).slice(0, 8))}</p>
+                `;
+                
+                statusDiv.textContent = `✅ Test completed successfully! Reduced from ~10,000 to ${paletteLength} colors.`;
+                
+            } catch (error) {
+                statusDiv.textContent = `❌ Test failed: ${error.message}`;
+                statusDiv.className = 'status error';
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Run test when page loads
+        runTest();
+    </script>
+</body>
+</html>

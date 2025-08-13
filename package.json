@@ -1,0 +1,75 @@
+{
+  "name": "libimagequant-wasm",
+  "version": "0.1.0",
+  "description": "WASM bindings for libimagequant image quantization library with Web Worker support",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./worker": {
+      "import": "./dist/worker.mjs",
+      "require": "./dist/worker.cjs",
+      "types": "./dist/worker.d.ts"
+    },
+    "./wasm": "./dist/wasm/libimagequant_wasm.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run clean && vite build && npm run build:types",
+    "build:types": "tsc --emitDeclarationOnly --outDir dist",
+    "build:wasm": "PATH=/Users/akshet/.cargo/bin:$PATH wasm-pack build --target web --out-dir dist/wasm",
+    "clean": "rm -rf dist/ target/",
+    "preview": "vite preview",
+    "serve": "vite dev --port 8080",
+    "test": "npm run build && npm run serve",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "image",
+    "quantization",
+    "palette",
+    "png",
+    "gif",
+    "optimization",
+    "compression",
+    "color-reduction",
+    "web-worker"
+  ],
+  "author": "Akshet Pandey <argetlam.akshet@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0",
+    "terser": "^5.0.0"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akshetpandey/libimagequant-wasm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akshetpandey/libimagequant-wasm/issues"
+  },
+  "homepage": "https://github.com/akshetpandey/libimagequant-wasm#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
