@@ -45,6 +45,10 @@ export interface LibImageQuantOptions {
   workerUrl?: string;
   /** Custom path to WASM module directory (should contain libimagequant_wasm.js) */
   wasmUrl?: string;
+  /** Timeout for worker initialization in milliseconds (default: 10000) */
+  initTimeout?: number;
+  /** Timeout for individual operations in milliseconds (default: 30000) */
+  operationTimeout?: number;
 }
 
 export class LibImageQuant {
@@ -54,11 +58,15 @@ export class LibImageQuant {
     private operationCounter: number = 0;
     private workerUrl: string;
     private wasmUrl?: string;
+    private initTimeout: number;
+    private operationTimeout: number;
     private initPromise: Promise<void>;
 
     constructor(options: LibImageQuantOptions = {}) {
         this.workerUrl = options.workerUrl || './worker.js';
         this.wasmUrl = options.wasmUrl;
+        this.initTimeout = options.initTimeout || 10000;
+        this.operationTimeout = options.operationTimeout || 30000;
         this.initPromise = this.initialize();
     }
 
@@ -109,7 +117,7 @@ export class LibImageQuant {
                     if (!this.isReady) {
                         reject(new Error('Worker initialization timeout'));
                     }
-                }, 10000);
+                }, this.initTimeout);
                 
             } catch (error) {
                 reject(error);
@@ -140,7 +148,7 @@ export class LibImageQuant {
                     this.pendingOperations.delete(id);
                     reject(new Error('Operation timeout'));
                 }
-            }, 30000); // 30 second timeout
+            }, this.operationTimeout);
         });
     }
 
