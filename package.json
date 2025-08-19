@@ -1,6 +1,6 @@
 {
   "name": "libimagequant-wasm",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "WASM bindings for libimagequant image quantization library with Web Worker support",
   "type": "module",
   "main": "./dist/index.cjs",
