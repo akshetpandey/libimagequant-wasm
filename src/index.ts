@@ -57,14 +57,14 @@ export default class LibImageQuant {
     { resolve: (value: any) => void; reject: (reason?: any) => void }
   >();
   private operationCounter: number = 0;
-  private workerUrl: string;
+  private workerUrl?: string;
   private wasmUrl?: string;
   private initTimeout: number;
   private operationTimeout: number;
   private initPromise: Promise<void>;
 
   constructor(options: LibImageQuantOptions = {}) {
-    this.workerUrl = options.workerUrl || "./worker.js";
+    this.workerUrl = options.workerUrl;
     this.wasmUrl = options.wasmUrl;
     this.initTimeout = options.initTimeout || 10000;
     this.operationTimeout = options.operationTimeout || 30000;
@@ -79,7 +79,13 @@ export default class LibImageQuant {
 
     return new Promise((resolve, reject) => {
       try {
-        this.worker = new Worker(this.workerUrl, { type: "module" });
+        let workerUrl;
+        if (this.workerUrl) {
+          workerUrl = this.workerUrl;
+        } else {
+          workerUrl = new URL('./worker', import.meta.url).href;
+        }
+        this.worker = new Worker(workerUrl, { type: "module" });
 
         this.worker.onmessage = (e) => {
           const { type, id, success, result, error } = e.data;
