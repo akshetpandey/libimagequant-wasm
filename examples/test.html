@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>libimagequant WASM Test</title>
+    <title>libimagequant WASM PNG Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -25,9 +25,22 @@
             border-radius: 5px;
         }
         
-        canvas {
+        .image-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .image-container {
             max-width: 100%;
             border: 1px solid #ccc;
+            margin: 10px 0;
+        }
+        
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            display: block;
         }
         
         .controls {
@@ -93,6 +106,8 @@
             grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
             gap: 2px;
             margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
         }
         
         .color-swatch {
@@ -101,28 +116,59 @@
             border: 1px solid #000;
             border-radius: 2px;
         }
+
+        .file-drop-area {
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .file-drop-area:hover {
+            border-color: #007cba;
+        }
+
+        .file-drop-area.drag-over {
+            border-color: #007cba;
+            background-color: #f0f8ff;
+        }
+
+        .download-section {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
-    <h1>libimagequant WASM Test</h1>
+    <h1>libimagequant WASM PNG Test</h1>
     
     <div class="panel">
-        <h3>Load Image</h3>
-        <input type="file" id="imageInput" accept="image/*">
-        <button onclick="loadSampleImage()">Load Sample Image</button>
+        <h3>Load PNG Image</h3>
+        <div class="file-drop-area" id="fileDropArea">
+            <p>Drop a PNG file here or click to select</p>
+            <input type="file" id="imageInput" accept="image/png" style="display: none;">
+        </div>
+        <button onclick="createSamplePng()">Create Sample PNG</button>
     </div>
 
     <div class="container">
         <div class="panel">
-            <h3>Original Image</h3>
-            <canvas id="originalCanvas"></canvas>
-            <div id="originalInfo" class="info"></div>
+            <h3>Original PNG</h3>
+            <div class="image-display">
+                <div class="image-container" id="originalImageContainer"></div>
+                <div id="originalInfo" class="info"></div>
+            </div>
         </div>
         
         <div class="panel">
-            <h3>Quantized Image</h3>
-            <canvas id="quantizedCanvas"></canvas>
-            <div id="quantizedInfo" class="info"></div>
+            <h3>Quantized PNG</h3>
+            <div class="image-display">
+                <div class="image-container" id="quantizedImageContainer"></div>
+                <div id="quantizedInfo" class="info"></div>
+            </div>
             
             <h4>Color Palette</h4>
             <div id="palette" class="palette"></div>
@@ -163,8 +209,7 @@
             </label>
         </div>
         
-        <button id="quantizeBtn" onclick="quantizeImage()" disabled>Quantize Image</button>
-        <button onclick="downloadQuantized()" id="downloadBtn" disabled>Download Result</button>
+        <button id="quantizeBtn" onclick="quantizeImage()" disabled>Quantize PNG</button>
     </div>
 
     <div id="messages"></div>
@@ -173,7 +218,7 @@
         import LibImageQuant from '../dist/index.mjs';
 
         let quantizer = null;
-        let originalImageData = null;
+        let originalPngBytes = null;
         let lastResult = null;
 
         // Initialize quantizer
@@ -183,7 +228,18 @@
                 quantizer = new LibImageQuant({
                     workerUrl: '../dist/worker.mjs'
                 });
-                await quantizer.initPromise;
+                // Wait for initialization
+                await new Promise((resolve, reject) => {
+                    setTimeout(async () => {
+                        try {
+                            // Test if ready by calling a simple method
+                            await quantizer.initPromise;
+                            resolve();
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }, 100);
+                });
                 showMessage('WASM module initialized successfully!', 'success');
                 return true;
             } catch (error) {
@@ -206,104 +262,117 @@
             document.getElementById(id).addEventListener('input', updateSliderValues);
         });
 
-        // File input handler
-        document.getElementById('imageInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                loadImageFromFile(file);
+        // File drag and drop handling
+        const fileDropArea = document.getElementById('fileDropArea');
+        const fileInput = document.getElementById('imageInput');
+
+        fileDropArea.addEventListener('click', () => fileInput.click());
+        fileDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropArea.classList.add('drag-over');
+        });
+        fileDropArea.addEventListener('dragleave', () => {
+            fileDropArea.classList.remove('drag-over');
+        });
+        fileDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                loadPngFromFile(files[0]);
             }
         });
 
-        function loadImageFromFile(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = async function() {
-                    await drawImageToCanvas(img, 'originalCanvas');
-                    document.getElementById('quantizeBtn').disabled = false;
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadPngFromFile(file);
+            }
+        });
+
+        async function loadPngFromFile(file) {
+            if (!file.type.startsWith('image/png')) {
+                showMessage('Please select a PNG file', 'error');
+                return;
+            }
+
+            try {
+                showMessage('Loading PNG file...', 'info');
+                originalPngBytes = new Uint8Array(await file.arrayBuffer());
+                
+                // Create object URL for display
+                const blob = new Blob([originalPngBytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                
+                displayImage(url, 'originalImageContainer');
+                
+                // Update original info
+                document.getElementById('originalInfo').innerHTML = `
+                    File size: ${formatBytes(originalPngBytes.length)}<br>
+                    Type: PNG<br>
+                    Status: Loaded
+                `;
+                
+                document.getElementById('quantizeBtn').disabled = false;
+                showMessage('PNG loaded successfully!', 'success');
+                
+            } catch (error) {
+                showMessage(`Failed to load PNG: ${error.message}`, 'error');
+            }
         }
 
-        window.loadSampleImage = async function() {
-            // Create a sample gradient image
-            const canvas = document.getElementById('originalCanvas');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = 200;
-            canvas.height = 200;
-            
-            // Create a colorful gradient
-            for (let x = 0; x < canvas.width; x++) {
-                for (let y = 0; y < canvas.height; y++) {
-                    const r = Math.floor((x / canvas.width) * 255);
-                    const g = Math.floor((y / canvas.height) * 255);
-                    const b = Math.floor(((x + y) / (canvas.width + canvas.height)) * 255);
-                    
-                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                    ctx.fillRect(x, y, 1, 1);
+        window.createSamplePng = async function() {
+            try {
+                showMessage('Creating sample PNG...', 'info');
+                
+                // Create a sample image with canvas and convert to PNG
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 200;
+                const ctx = canvas.getContext('2d');
+                
+                // Create a colorful gradient
+                for (let x = 0; x < canvas.width; x++) {
+                    for (let y = 0; y < canvas.height; y++) {
+                        const r = Math.floor((x / canvas.width) * 255);
+                        const g = Math.floor((y / canvas.height) * 255);
+                        const b = Math.floor(((x + y) / (canvas.width + canvas.height)) * 255);
+                        
+                        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        ctx.fillRect(x, y, 1, 1);
+                    }
                 }
+                
+                // Convert canvas to PNG bytes
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                originalPngBytes = new Uint8Array(await blob.arrayBuffer());
+                
+                const url = URL.createObjectURL(blob);
+                displayImage(url, 'originalImageContainer');
+                
+                document.getElementById('originalInfo').innerHTML = `
+                    Dimensions: 200 × 200<br>
+                    File size: ${formatBytes(originalPngBytes.length)}<br>
+                    Type: Sample PNG<br>
+                    Status: Generated
+                `;
+                
+                document.getElementById('quantizeBtn').disabled = false;
+                showMessage('Sample PNG created successfully!', 'success');
+                
+            } catch (error) {
+                showMessage(`Failed to create sample PNG: ${error.message}`, 'error');
             }
-            
-            await updateOriginalInfo();
-            document.getElementById('quantizeBtn').disabled = false;
         };
 
-        async function drawImageToCanvas(img, canvasId) {
-            const canvas = document.getElementById(canvasId);
-            const ctx = canvas.getContext('2d');
-            
-            // Scale down large images
-            const maxSize = 400;
-            let { width, height } = img;
-            
-            if (width > maxSize || height > maxSize) {
-                const ratio = Math.min(maxSize / width, maxSize / height);
-                width *= ratio;
-                height *= ratio;
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            
-            ctx.drawImage(img, 0, 0, width, height);
-            await updateOriginalInfo();
-        }
-
-        // Function to estimate PNG size from canvas
-        function estimatePngSize(canvas) {
-            return new Promise((resolve) => {
-                canvas.toBlob((blob) => {
-                    resolve(blob.size);
-                }, 'image/png');
-            });
-        }
-
-        async function updateOriginalInfo() {
-            const canvas = document.getElementById('originalCanvas');
-            const ctx = canvas.getContext('2d');
-            originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            const pixels = canvas.width * canvas.height;
-            const rawKb = Math.round((originalImageData.data.length / 1024) * 100) / 100;
-            
-            // Calculate estimated PNG size
-            const pngSizeBytes = await estimatePngSize(canvas);
-            const pngKb = Math.round((pngSizeBytes / 1024) * 100) / 100;
-            
-            document.getElementById('originalInfo').innerHTML = `
-                Dimensions: ${canvas.width} × ${canvas.height}<br>
-                Pixels: ${pixels.toLocaleString()}<br>
-                Raw RGBA: ${rawKb} KB<br>
-                PNG encoded: ${pngKb} KB
-            `;
+        function displayImage(url, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<img src="${url}" alt="Image">`;
         }
 
         window.quantizeImage = async function() {
-            if (!originalImageData || !quantizer) {
-                showMessage('Please load an image and wait for WASM initialization', 'error');
+            if (!originalPngBytes || !quantizer) {
+                showMessage('Please load a PNG file and wait for WASM initialization', 'error');
                 return;
             }
 
@@ -322,67 +391,45 @@
                     dithering: parseFloat(document.getElementById('dithering').value) / 100
                 };
 
-                showMessage('Quantizing image...', 'info');
+                showMessage('Quantizing PNG...', 'info');
                 const startTime = performance.now();
                 
-                lastResult = await quantizer.quantizeImageData(originalImageData, options);
+                lastResult = await quantizer.quantizePng(originalPngBytes, options);
                 
                 const endTime = performance.now();
                 const duration = Math.round(endTime - startTime);
 
-                // Display result
-                displayQuantizedImage(lastResult);
+                // Display quantized PNG
+                const quantizedBlob = new Blob([lastResult.pngBytes], { type: 'image/png' });
+                const quantizedUrl = URL.createObjectURL(quantizedBlob);
+                displayImage(quantizedUrl, 'quantizedImageContainer');
+                
+                // Display palette
                 displayPalette(lastResult.palette);
                 
-                // Calculate size information
-                const rawKb = Math.round((lastResult.imageData.length / 1024) * 100) / 100;
-                const quantizedCanvas = document.getElementById('quantizedCanvas');
-                const quantizedPngSizeBytes = await estimatePngSize(quantizedCanvas);
-                const quantizedPngKb = Math.round((quantizedPngSizeBytes / 1024) * 100) / 100;
-                
-                // Calculate original PNG size for comparison
-                const originalCanvas = document.getElementById('originalCanvas');
-                const originalPngSizeBytes = await estimatePngSize(originalCanvas);
-                const originalPngKb = Math.round((originalPngSizeBytes / 1024) * 100) / 100;
-                
-                const compression = Math.round((1 - (lastResult.paletteLength / 256)) * 100);
-                const sizeReduction = Math.round((1 - (quantizedPngSizeBytes / originalPngSizeBytes)) * 100);
+                // Calculate size reduction
+                const originalSize = originalPngBytes.length;
+                const quantizedSize = lastResult.pngBytes.length;
+                const sizeReduction = Math.round((1 - (quantizedSize / originalSize)) * 100);
                 
                 document.getElementById('quantizedInfo').innerHTML = `
                     Dimensions: ${lastResult.width} × ${lastResult.height}<br>
                     Colors: ${lastResult.paletteLength}<br>
                     Quality: ${Math.round(lastResult.quality * 100)}%<br>
-                    Raw RGBA: ${rawKb} KB<br>
-                    PNG encoded: ${quantizedPngKb} KB<br>
+                    PNG size: ${formatBytes(quantizedSize)}<br>
                     Size reduction: ${sizeReduction > 0 ? '+' : ''}${sizeReduction}%<br>
                     Time: ${duration}ms
                 `;
 
                 showMessage(`Quantization completed in ${duration}ms with ${lastResult.paletteLength} colors`, 'success');
-                document.getElementById('downloadBtn').disabled = false;
-
             } catch (error) {
                 showMessage(`Quantization failed: ${error.message}`, 'error');
+                console.error('Quantization error:', error);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Quantize Image';
+                btn.textContent = 'Quantize PNG';
             }
         };
-
-        function displayQuantizedImage(result) {
-            const canvas = document.getElementById('quantizedCanvas');
-            canvas.width = result.width;
-            canvas.height = result.height;
-            
-            const ctx = canvas.getContext('2d');
-            const imageData = new ImageData(
-                new Uint8ClampedArray(result.imageData),
-                result.width,
-                result.height
-            );
-            
-            ctx.putImageData(imageData, 0, 0);
-        }
 
         function displayPalette(palette) {
             const paletteDiv = document.getElementById('palette');
@@ -397,15 +444,13 @@
             });
         }
 
-        window.downloadQuantized = function() {
-            if (!lastResult) return;
-            
-            const canvas = document.getElementById('quantizedCanvas');
-            const link = document.createElement('a');
-            link.download = 'quantized-image.png';
-            link.href = canvas.toDataURL();
-            link.click();
-        };
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
 
         function showMessage(message, type = 'info') {
             const messagesDiv = document.getElementById('messages');
