@@ -17,7 +17,12 @@
       "require": "./dist/worker.cjs",
       "types": "./dist/worker.d.ts"
     },
-    "./wasm": "./dist/wasm/libimagequant_wasm.js"
+    "./wasm": {
+      "import": "./dist/wasm/libimagequant_wasm.js",
+      "require": "./dist/wasm/libimagequant_wasm.js",
+      "types": "./dist/wasm/libimagequant_wasm.d.ts"
+    },
+    "./libimagequant_wasm_bg.wasm": "./dist/wasm/libimagequant_wasm_bg.wasm"
   },
   "files": [
     "dist/",
