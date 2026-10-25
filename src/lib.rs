@@ -206,8 +206,8 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
     let cursor = Cursor::new(data);
     
     let mut decoder = Decoder::new(cursor);
-    // Expand indexed/paletted PNGs to RGB(A) and low bit-depth to 8-bit
-    decoder.set_transformations(Transformations::EXPAND);
+    // Normalize every supported PNG to eight-bit channels before RGBA conversion.
+    decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
     let mut reader = decoder.read_info()
         .map_err(|e| JsValue::from_str(&format!("Failed to read PNG info: {}", e)))?;
     

@@ -44,6 +44,7 @@
     "test:watch": "vitest",
     "test:manual": "pnpm build && pnpm serve",
     "test:package": "node examples/package-test.js",
+    "test:integration": "node --test tests/integration/*.test.mjs",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },

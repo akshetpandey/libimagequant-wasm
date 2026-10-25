@@ -194,6 +194,7 @@ pnpm build
 | `pnpm typecheck` | Run TypeScript type checking |
 | `pnpm test` | Run tests (Vitest + headless Chromium; build first) |
 | `pnpm test:package` | Validate built package files |
+| `pnpm test:integration` | Run built-artifact and package-consumer regressions |
 | `pnpm test:watch` | Run tests in watch mode |
 | `pnpm dev` | Start Vite dev server |
 | `pnpm clean` | Remove build output |

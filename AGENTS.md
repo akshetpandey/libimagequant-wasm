@@ -20,6 +20,7 @@ These instructions apply to all coding agents working in this repository.
 - `pnpm test` — run the Vitest suite in headless Chromium against the built output. Run `pnpm build` first.
 - `pnpm test:watch` — run browser tests in watch mode.
 - `pnpm test:package` — validate the built package's required files.
+- `pnpm test:integration` — run built-artifact and package-consumer regression tests after building.
 - `cargo check --locked --target wasm32-unknown-unknown` — check the Rust WASM implementation.
 - `cargo test --locked` — run native Rust tests (browser tests exercise the WASM API).
 - `pnpm dev` / `pnpm serve` — start the Vite server on port 8080.
