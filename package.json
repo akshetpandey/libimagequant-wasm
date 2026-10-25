@@ -1,6 +1,6 @@
 {
   "name": "libimagequant-wasm",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Image quantization for browsers and Node.js with WebAssembly and worker support",
   "type": "module",
   "packageManager": "pnpm@12.15.0",
