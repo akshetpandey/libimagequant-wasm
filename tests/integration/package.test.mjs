@@ -210,7 +210,7 @@ for (const nodeOnly of [false, true]) {
         `import type { QuantizationResult, QuantizedAnimation, AnimationFrame } from '${entry}';
         import type { RgbaImageData } from '${entry}';
         function inspect(result: QuantizationResult) {
-          const options: import('${entry}').QuantizationOptions = { includeFrameData: true, metadata: 'safe' };
+          const options: import('${entry}').QuantizationOptions = { includeFrameData: true, metadata: 'preserve' };
           console.log(options);
           const animation: QuantizedAnimation | undefined = result.animation;
           const frame: AnimationFrame | undefined = animation?.frames[0];
@@ -239,7 +239,7 @@ test('raw APNG declarations retain owned buffers and match the Node result contr
     const q = new ImageQuantizer();
     try {
       const raw: PngAnimationQuantizationResult | undefined = q.quantizePngAnimation(Buffer.from([]), 0, true, 'safe');
-      const still: QuantizationResult = q.quantizePng(Buffer.from([]), 0, 'all');
+      const still: QuantizationResult = q.quantizePng(Buffer.from([]), 0, 'preserve');
       console.log(still.pngBytes);
       const result: QuantizationResult | undefined = raw;
       if (result?.animation?.frames[0].imageData) {

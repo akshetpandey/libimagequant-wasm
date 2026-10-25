@@ -7,7 +7,7 @@ const MAX_METADATA_BYTES: usize = 1_048_576;
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Policy {
     Safe,
-    All,
+    Preserve,
     None,
 }
 
@@ -15,9 +15,9 @@ impl Policy {
     pub fn parse(value: Option<&str>) -> Result<Self, String> {
         match value.unwrap_or("safe") {
             "safe" => Ok(Self::Safe),
-            "all" => Ok(Self::All),
+            "preserve" => Ok(Self::Preserve),
             "none" => Ok(Self::None),
-            _ => Err("metadata must be 'safe', 'all', or 'none'".into()),
+            _ => Err("metadata must be 'safe', 'preserve', or 'none'".into()),
         }
     }
 }
@@ -26,7 +26,7 @@ pub(crate) fn decoder(data: &[u8], policy: Policy) -> Decoder<Cursor<&[u8]>> {
     let mut options = DecodeOptions::default();
     options.set_skip_ancillary_crc_failures(false);
     let mut decoder = Decoder::new_with_options(Cursor::new(data), options);
-    decoder.set_ignore_text_chunk(policy != Policy::All);
+    decoder.set_ignore_text_chunk(policy != Policy::Preserve);
     decoder.set_ignore_iccp_chunk(policy == Policy::None);
     decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
     decoder
@@ -67,7 +67,7 @@ pub(crate) fn select(info: &Info<'static>, policy: Policy) -> Result<Info<'stati
         charge(&mut budget, p.len())?;
         out.icc_profile = Some(Cow::Owned(p.to_vec()));
     }
-    if policy == Policy::All {
+    if policy == Policy::Preserve {
         if let Some(exif) = &info.exif_metadata {
             charge(&mut budget, exif.len())?;
             out.exif_metadata = Some(Cow::Owned(exif.to_vec()));

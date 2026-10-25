@@ -49,7 +49,7 @@ for (const [label, Q] of [
     for (const animated of [false, true]) {
       const input = sample(animated);
       const results = [];
-      for (const metadata of ['safe', 'all', 'none']) {
+      for (const metadata of ['safe', 'preserve', 'none']) {
         const result = await q.quantizePng(input, { metadata, dithering: 0 });
         const output = fields(result.pngBytes);
         assert.equal(Boolean(result.animation), animated);
@@ -58,8 +58,8 @@ for (const [label, Q] of [
           if (output.has(name)) assert.deepEqual(output.get(name), fields(input).get(name));
         }
         for (const name of ['tEXt', 'zTXt', 'iTXt', 'eXIf'])
-          assert.equal(output.has(name), metadata === 'all', name);
-        if (metadata === 'all') {
+          assert.equal(output.has(name), metadata === 'preserve', name);
+        if (metadata === 'preserve') {
           assert.deepEqual(output.get('eXIf'), exif);
           assert.equal(output.get('tEXt').toString(), 'Author\0Example');
           assert.equal(
@@ -78,7 +78,7 @@ for (const [label, Q] of [
         results[0].pngBytes,
       );
     }
-    for (const metadata of ['invalid', true, {}, null])
+    for (const metadata of ['all', 'invalid', true, {}, null])
       await assert.rejects(q.quantizePng(sample(false), { metadata }), /metadata/);
   });
 }
@@ -115,7 +115,7 @@ test('metadata preservation rejects oversized and compressed text without poison
     chunk('zTXt', Buffer.concat([Buffer.from('Comment\0\0'), deflateSync('x'.repeat(1048577))])),
   ]) {
     const input = addMetadata(source, [], [extra]);
-    await assert.rejects(q.quantizePng(input, { metadata: 'all' }), /metadata/);
+    await assert.rejects(q.quantizePng(input, { metadata: 'preserve' }), /metadata/);
     assert.equal((await q.quantizePng(input, { metadata: 'safe' })).animation.frames.length, 20);
   }
 });

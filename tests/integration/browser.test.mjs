@@ -542,7 +542,7 @@ test('browser PNG and APNG workers apply metadata policy with compact frame resu
       const q = new Quantizer();
       try {
         const results = [];
-        for (const metadata of ['safe', 'all', 'none']) {
+        for (const metadata of ['safe', 'preserve', 'none']) {
           const result = await q.quantizePng(new Uint8Array(bytes), { metadata });
           results.push({
             png: [...result.pngBytes],

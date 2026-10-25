@@ -195,7 +195,7 @@ Blob reading is covered by the operation timeout and disposal. Each result owns 
 PNG and APNG input is normalized to RGBA8. The `metadata` option applies to PNG input:
 
 - `'safe'` (default): retain gAMA, cHRM, sRGB, compatible RGB ICC profiles, and pHYs pixel density/aspect ratio.
-- `'all'`: also retain supported tEXt, zTXt, iTXt, and EXIF, including text after image data. EXIF can contain location data, orientation, and an original thumbnail; choose this policy when those remain appropriate.
+- `'preserve'`: also retain supported tEXt, zTXt, iTXt, and EXIF, including text after image data. EXIF can contain location data, orientation, and an original thumbnail; choose this policy when those remain appropriate.
 - `'none'`: strip ancillary metadata, while retaining APNG playback controls.
 
 Preserved profile/text/EXIF payloads are limited to 1 MiB in total, with bounded text decompression.
@@ -238,7 +238,7 @@ After a worker crash, dispose of the instance and create another.
 | `quality`          | `{ min, target }`, integers `0–100`, `min <= target` | Minimum acceptable and target quality                        |
 | `dithering`        | `0–1`                                                | Dithering strength                                           |
 | `posterization`    | Integer `0–4`                                        | Number of low color bits discarded                           |
-| `metadata`         | `'safe'` (default), `'all'`, or `'none'`             | Metadata policy for PNG/APNG input                           |
+| `metadata`         | `'safe'` (default), `'preserve'`, or `'none'`        | Metadata policy for PNG/APNG input                           |
 | `includeFrameData` | Boolean, default `false`                             | Return full APNG frame pixels in addition to timing metadata |
 
 Reuse an instance for multiple images to avoid worker and WASM startup costs;

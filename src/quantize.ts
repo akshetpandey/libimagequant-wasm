@@ -71,8 +71,8 @@ function withQuantizer<T>(
 ): T {
   if (options.includeFrameData !== undefined && typeof options.includeFrameData !== 'boolean')
     throw new TypeError('includeFrameData must be a boolean');
-  if (options.metadata !== undefined && !['safe', 'all', 'none'].includes(options.metadata))
-    throw new TypeError("metadata must be 'safe', 'all', or 'none'");
+  if (options.metadata !== undefined && !['safe', 'preserve', 'none'].includes(options.metadata))
+    throw new TypeError("metadata must be 'safe', 'preserve', or 'none'");
   const quantizer = new wasm.ImageQuantizer();
   try {
     if (options.speed !== undefined) quantizer.setSpeed(options.speed);
