@@ -58,6 +58,7 @@
         "src/worker.ts",
         "tests/worker-initialization.test.ts",
         "tests/integration/browser.test.mjs",
+        "tests/integration/apng.test.mjs",
         "tests/integration/node.test.mjs"
       ],
       "rules": {

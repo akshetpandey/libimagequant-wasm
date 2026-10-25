@@ -89,6 +89,9 @@ The test suite covers:
 APNG coverage includes a checked-in real 20-frame animation, with provenance in
 [tests/fixtures/README.md](tests/fixtures/README.md). Chromium's native decoder
 validates its source compositing and every encoded output frame.
+Worker instrumentation also checks that each APNG result buffer is transferred
+once and detached in the sender, including separate fallback images. Isolated
+WASM instances measure peak heap growth for delta disposal and packed RGBA input.
 
 ### Compatibility checks
 

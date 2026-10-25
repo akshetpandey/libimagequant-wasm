@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { on } from 'node:events';
+import { Worker } from 'node:worker_threads';
 import Quantizer from 'libimagequant-wasm/node';
 import * as wasm from '../../dist/wasm/libimagequant_wasm.js';
 import {
@@ -15,12 +17,48 @@ import {
   green,
   blue,
   clear,
+  inspectTransfers,
 } from './apng-fixtures.mjs';
 
 wasm.initSync({
   module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)),
 });
 const common = createRequire(import.meta.url)('libimagequant-wasm/node');
+
+test('Node APNG workers transfer every owned buffer exactly once', async () => {
+  const script = `
+    import { parentPort } from 'node:worker_threads';
+    parentPort.postMessage = (${inspectTransfers})(parentPort.postMessage.bind(parentPort));
+    await import(${JSON.stringify(import.meta.resolve('libimagequant-wasm/node-worker'))});
+  `;
+  for (const [input, expected] of [
+    [await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url)), 21],
+    [makeApng({ poster: [...red, ...red], frames: [{ samples: [...blue, ...green] }] }), 3],
+  ]) {
+    const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(script)}`), {
+      execArgv: [],
+    });
+    const messages = on(worker, 'message', { signal: AbortSignal.timeout(10000) });
+    try {
+      assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
+      worker.postMessage({ id: 1, action: 'quantize_png', data: { pngBytes: input } });
+      const [response] = (await messages.next()).value;
+      assert.equal(response.success, true);
+      assert(response.result.pngBytes.byteLength > 0);
+      assert(response.result.animation.frames.every((f) => f.imageData.data.byteLength > 0));
+      const [report] = (await messages.next()).value;
+      assert.deepEqual(report, {
+        type: 'transfer-inspection',
+        expected,
+        supplied: expected,
+        detached: true,
+      });
+    } finally {
+      await messages.return();
+      await worker.terminate();
+    }
+  }
+});
 
 function near(actual, expected) {
   assert.equal(actual.length, expected.length);
@@ -414,6 +452,45 @@ test('uses one maxColors budget and rejects an unattainable animation quality', 
   for (const dithering of [NaN, Infinity, -1, 1.00001])
     await assert.rejects(q.quantizePng(png, { dithering }), /dithering/);
   assert.equal((await q.quantizePng(png)).animation.frames.length, 3);
+});
+
+test('one shared palette retains contrasting frames with dithering enabled', async (t) => {
+  const q = new Quantizer();
+  t.after(() => q.dispose());
+  const source = Array.from({ length: 4 }, (_frameValue, frame) =>
+    Array.from({ length: 256 }, (_pixelValue, i) => [
+      frame % 3 === 0 ? i : 0,
+      frame % 3 === 1 ? i : 0,
+      frame % 3 === 2 ? i : 0,
+      frame === 3 ? 128 : 255,
+    ]).flat(),
+  );
+  const result = await q.quantizePng(
+    makeApng({
+      width: 16,
+      height: 16,
+      poster: Array.from({ length: 256 }, () => [255, 255, 255, 255]).flat(),
+      frames: source.map((samples) => ({ samples })),
+    }),
+    { maxColors: 16, dithering: 1, speed: 1 },
+  );
+  assert(result.paletteLength <= 16);
+  const encoded = parseIndexedApng(result.pngBytes);
+  assert.deepEqual(encoded.palette, result.palette);
+  assert.deepEqual(encoded.poster, [...result.imageData.data]);
+  for (const [i, frame] of encoded.frames.entries()) {
+    assert.deepEqual(frame.pixels, [...result.animation.frames[i].imageData.data]);
+    let error = 0;
+    for (let p = 0; p < frame.pixels.length; p++) {
+      const alpha = p - (p % 4) + 3;
+      const difference =
+        p % 4 === 3
+          ? frame.pixels[p] - source[i][p]
+          : (frame.pixels[p] * frame.pixels[alpha] - source[i][p] * source[i][alpha]) / 255;
+      error += difference * difference;
+    }
+    assert(error / frame.pixels.length < 300, `frame ${i} no longer uses its learned colors`);
+  }
 });
 
 function rewrite(bytes, type, update, which = 0) {

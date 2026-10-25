@@ -222,6 +222,31 @@ export function compositingApng() {
     ],
   });
 }
+
+// Wrap the real worker's sender to distinguish transfers from structured clones.
+// This function is serialized into both browser and Node test workers.
+export function inspectTransfers(send) {
+  return (message, transfer) => {
+    const result = message.result;
+    const buffers = result
+      ? [
+          ...new Set([
+            result.pngBytes.buffer,
+            result.imageData.data.buffer,
+            ...result.animation.frames.map((frame) => frame.imageData.data.buffer),
+          ]),
+        ]
+      : [];
+    send(message, transfer);
+    if (result)
+      send({
+        type: 'transfer-inspection',
+        expected: buffers.length,
+        supplied: transfer.length,
+        detached: buffers.every((buffer) => buffer.byteLength === 0),
+      });
+  };
+}
 export const compositedPixels = [
   [...red, ...red],
   [...red, 127, 0, 128, 255],

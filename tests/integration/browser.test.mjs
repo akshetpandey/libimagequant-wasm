@@ -16,6 +16,7 @@ import {
   green,
   blue,
   clear,
+  inspectTransfers,
 } from './apng-fixtures.mjs';
 
 const browserTypes = { chromium, firefox, webkit };
@@ -163,6 +164,65 @@ test('APNG retains all frames through browser workers and native decoding', asyn
 test('the default constructor works without copying worker or WASM assets', async () => {
   assert.deepEqual(await quantize({}), { palette: [[255, 0, 0, 255]], width: 1, height: 1 });
 });
+
+test(
+  'browser APNG workers transfer every owned buffer exactly once',
+  { timeout: 15000 },
+  async () => {
+    const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
+    for (const [bytes, expected] of [
+      [input, 21],
+      [makeApng({ poster: [...red, ...red], frames: [{ samples: [...blue, ...green] }] }), 3],
+    ]) {
+      const report = await page.evaluate(
+        async ({ png, hook }) => {
+          const source = `self.postMessage = (${hook})(self.postMessage.bind(self));
+        await import(${JSON.stringify(new URL('/dist/worker.mjs', location.href).href)});`;
+          const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+          const worker = new Worker(url, { type: 'module' });
+          try {
+            return await new Promise((resolve, reject) => {
+              let result;
+              worker.onerror = (event) => reject(new Error(event.message));
+              worker.onmessage = ({ data }) => {
+                if (data.type === 'ready')
+                  worker.postMessage({
+                    id: 1,
+                    action: 'quantize_png',
+                    data: { pngBytes: new Uint8Array(png) },
+                  });
+                else if (data.success === false) reject(new Error(data.error));
+                else if (data.result) result = data.result;
+                else if (data.type === 'transfer-inspection')
+                  resolve({
+                    ...data,
+                    native: result.animation.frames.every(
+                      (frame) => frame.imageData instanceof ImageData,
+                    ),
+                    received:
+                      result.pngBytes.byteLength > 0 &&
+                      result.animation.frames.every((frame) => frame.imageData.data.byteLength > 0),
+                  });
+              };
+            });
+          } finally {
+            worker.terminate();
+            URL.revokeObjectURL(url);
+          }
+        },
+        { png: [...bytes], hook: inspectTransfers.toString() },
+      );
+      assert.deepEqual(report, {
+        type: 'transfer-inspection',
+        expected,
+        supplied: expected,
+        detached: true,
+        native: true,
+        received: true,
+      });
+    }
+  },
+);
 
 test('the real beach-ball APNG agrees with native source and output decoding', async () => {
   const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));

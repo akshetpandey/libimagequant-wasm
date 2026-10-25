@@ -194,6 +194,8 @@ Images are limited to 16,777,216 pixels (64 MiB of RGBA data). Resize larger ima
 before processing; actual working memory exceeds the raw image size.
 APNGs are limited to 1,000 frames and 67,108,864 total canvas pixels (256 MiB of
 RGBA data), counting the complete canvas per frame and any separate fallback.
+This bounds frame storage, rather than peak memory: quantization needs scratch
+space, and the worker's WASM heap retains its peak size until you call `dispose()`.
 
 ### Constructor options
 
