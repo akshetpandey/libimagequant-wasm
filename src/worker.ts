@@ -154,9 +154,7 @@ async function quantizeRgbaData(
 
     try {
       // Extract results
-      const palette = quantResult.getPalette();
       const quality = quantResult.getQuantizationQuality();
-      const paletteLength = quantResult.getPaletteLength();
 
       // Set dithering if specified
       if (options.dithering !== undefined) {
@@ -165,6 +163,9 @@ async function quantizeRgbaData(
 
       // Get palette indices (single remap operation)
       const paletteIndices = quantResult.getPaletteIndices(rgbaData, width, height);
+      // Remapping refines the colors; its indices refer to this final palette.
+      const palette = quantResult.getPalette();
+      const paletteLength = palette.length;
 
       // Reconstruct RGBA data from palette + indices (avoids a second remap)
       const pixelCount = width * height;

@@ -19,6 +19,35 @@ beforeAll(async () => {
 });
 
 describe('Color accuracy', () => {
+  it('uses the final remapping palette for PNG and ImageData output', async () => {
+    let seed = 17;
+    const pixels = Uint8ClampedArray.from({ length: 64 * 64 * 4 }, (_, i) =>
+      i % 4 === 3 ? 255 : ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 24)
+    );
+    const q = new ImageQuantizer();
+    const instance = new LibImageQuant({ workerUrl: WORKER_URL });
+    try {
+      q.setSpeed(3);
+      q.setMaxColors(8);
+      const reference = q.quantizeImage(pixels, 64, 64);
+      try {
+        reference.setDithering(1);
+        const expected = reference.remapImage(pixels, 64, 64);
+        const result = await instance.quantizeImageData(new ImageData(pixels, 64, 64), {
+          speed: 3, maxColors: 8, dithering: 1,
+        });
+        expect(result.palette).toEqual(reference.getPalette());
+        expect(result.imageData.data).toEqual(expected);
+        expect(decode_png_to_rgba(result.pngBytes)[0]).toEqual(expected);
+      } finally {
+        reference.free();
+      }
+    } finally {
+      q.free();
+      instance.dispose();
+    }
+  });
+
   it('solid red image preserves red in palette', async () => {
     const instance = new LibImageQuant({ workerUrl: WORKER_URL });
     try {
