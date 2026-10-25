@@ -114,10 +114,13 @@ function check(result, expected) {
   assert.deepEqual(encoded.palette, result.palette);
   assert.equal(encoded.numPlays, result.animation.numPlays);
   for (const [i, frame] of encoded.frames.entries()) {
-    assert.deepEqual(
-      [frame.width, frame.height, frame.x, frame.y, frame.blend, frame.dispose],
-      [result.width, result.height, 0, 0, 0, 0],
-    );
+    assert.equal(frame.blend, 0);
+    assert.equal(frame.dispose, 0);
+    if (i === 0)
+      assert.deepEqual(
+        [frame.width, frame.height, frame.x, frame.y],
+        [result.width, result.height, 0, 0],
+      );
     const metadata = result.animation.frames[i];
     assert.deepEqual(frame.delay, [metadata.delayNumerator, metadata.delayDenominator]);
     assert.equal(
@@ -698,5 +701,57 @@ test('a second real APNG preserves every frame with compact and expanded results
   for (const [i, frame] of encoded.frames.entries()) {
     assert.deepEqual(frame.pixels, [...expanded.animation.frames[i].imageData.data]);
     assert.equal(expanded.animation.frames[i].durationMs, source.animation.frames[i].durationMs);
+  }
+});
+
+test('delta encoding crops both axes and preserves clearing and unchanged delays', async (t) => {
+  const first = Array(4 * 4)
+    .fill(red)
+    .flat();
+  const second = [...first];
+  second.splice((2 * 4 + 3) * 4, 4, ...clear);
+  const third = [...second];
+  third.splice((1 * 4 + 1) * 4, 4, ...blue);
+  const input = makeApng({
+    width: 4,
+    height: 4,
+    frames: [
+      { samples: first },
+      { samples: second },
+      { samples: second, delay: [7, 0] },
+      { samples: third },
+      { samples: first },
+    ],
+  });
+  const q = new Quantizer();
+  t.after(() => q.dispose());
+  const result = await q.quantizePng(input, { dithering: 0 });
+  const encoded = check(result, [first, second, second, third, first]);
+  assert.deepEqual(
+    encoded.frames.map((f) => [f.x, f.y, f.width, f.height]),
+    [
+      [0, 0, 4, 4],
+      [3, 2, 1, 1],
+      [0, 0, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 3, 2],
+    ],
+  );
+});
+
+test('real APNG output uses smaller delta rectangles without changing decoded frames', async (t) => {
+  const q = new Quantizer();
+  t.after(() => q.dispose());
+  for (const file of ['beach-ball.apng', 'beach-ball-45.apng']) {
+    const input = await readFile(new URL(`../fixtures/${file}`, import.meta.url));
+    const result = await q.quantizePng(input, { maxColors: 64, dithering: 0 });
+    const encoded = parseIndexedApng(result.pngBytes);
+    const area = encoded.frames.reduce((sum, f) => sum + f.width * f.height, 0);
+    assert(area < result.width * result.height * encoded.frames.length * 0.8);
+    for (const [i, f] of encoded.frames.entries())
+      assert.deepEqual(f.pixels, [...result.animation.frames[i].imageData.data]);
+    t.diagnostic(
+      `${file}: ${result.pngBytes.byteLength} bytes; ${area} encoded pixels vs ${result.width * result.height * encoded.frames.length} full-frame pixels`,
+    );
   }
 });

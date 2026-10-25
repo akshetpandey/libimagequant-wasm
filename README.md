@@ -175,7 +175,8 @@ pixel per frame. `imageData` always contains one static/default preview. With fr
 pixels enabled, it shares the first frame's image data when `animation.defaultImageIsFrame`
 is true; otherwise it is a separate fallback.
 Frames are composited using the input's blending and disposal rules, then encoded
-as complete canvases rather than preserving source delta rectangles. Each frame
+as indexed delta rectangles computed from the quantized frames, including cleared
+pixels. Unchanged frames retain their delays through a one-pixel replacement. Each frame
 exposes its original `delayNumerator` and `delayDenominator`; a denominator of zero
 means 100. Static PNG results have no `animation` property.
 

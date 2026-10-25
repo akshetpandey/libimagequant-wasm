@@ -201,7 +201,21 @@ export function parseIndexedApng(bytes) {
     });
   }
   const poster = decode(defaults, width, height);
-  for (const frame of frames) frame.pixels = decode(frame.parts, frame.width, frame.height);
+  const canvas = new Uint8Array(width * height * 4);
+  for (const frame of frames) {
+    assert.equal(frame.blend, 0);
+    assert.equal(frame.dispose, 0);
+    assert(frame.width > 0 && frame.height > 0);
+    assert(frame.x + frame.width <= width && frame.y + frame.height <= height);
+    frame.regionPixels = decode(frame.parts, frame.width, frame.height);
+    for (let y = 0; y < frame.height; y++) {
+      canvas.set(
+        frame.regionPixels.slice(y * frame.width * 4, (y + 1) * frame.width * 4),
+        ((y + frame.y) * width + frame.x) * 4,
+      );
+    }
+    frame.pixels = [...canvas];
+  }
   return { width, height, palette, numPlays, frames, poster };
 }
 

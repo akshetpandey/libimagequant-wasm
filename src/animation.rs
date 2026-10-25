@@ -346,6 +346,50 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
     }))
 }
 
+// Compare final palette indices so dithering and transparent pixels stay exact.
+fn delta<'a>(
+    indices: &'a [u8],
+    previous: &[u8],
+    width: u32,
+    height: u32,
+) -> (u32, u32, u32, u32, Cow<'a, [u8]>) {
+    if previous.is_empty() {
+        return (0, 0, width, height, Cow::Borrowed(indices));
+    }
+    let (mut x0, mut y0, mut x1, mut y1) = (width, height, 0, 0);
+    for (i, (&new, &old)) in indices.iter().zip(previous).enumerate() {
+        if new != old {
+            let x = i as u32 % width;
+            let y = i as u32 / width;
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x + 1);
+            y1 = y1.max(y + 1);
+        }
+    }
+    // APNG cannot encode empty frames. Preserve the delay with one replacement.
+    if x1 == 0 {
+        return (0, 0, 1, 1, Cow::Borrowed(&indices[..1]));
+    }
+    let w = x1 - x0;
+    let h = y1 - y0;
+    if w == width {
+        return (
+            x0,
+            y0,
+            w,
+            h,
+            Cow::Borrowed(&indices[y0 as usize * width as usize..y1 as usize * width as usize]),
+        );
+    }
+    let mut cropped = Vec::with_capacity(w as usize * h as usize);
+    for y in y0..y1 {
+        let start = y as usize * width as usize + x0 as usize;
+        cropped.extend_from_slice(&indices[start..start + w as usize]);
+    }
+    (x0, y0, w, h, Cow::Owned(cropped))
+}
+
 pub(crate) fn quantize(
     data: &[u8],
     attr: &Attributes,
@@ -414,6 +458,7 @@ pub(crate) fn quantize(
             .map_err(|e| e.to_string())?;
         encoder.validate_sequence(true);
         let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        let mut previous_indices = Vec::new();
         // Pass two remaps and writes one frame at a time. Only requested pixels
         // and the default-image preview survive the callback.
         visit(data, |h, pixels, control| {
@@ -446,7 +491,23 @@ pub(crate) fn quantize(
             } else {
                 animation.poster = Some(pixels);
             }
-            writer.write_image_data(&indices).map_err(|e| e.to_string())
+            if control.is_some() {
+                let (x, y, w, height, region) =
+                    delta(&indices, &previous_indices, h.width, h.height);
+                // Reset the previous offset before growing the next rectangle.
+                writer.reset_frame_position().map_err(|e| e.to_string())?;
+                writer
+                    .set_frame_dimension(w, height)
+                    .map_err(|e| e.to_string())?;
+                writer.set_frame_position(x, y).map_err(|e| e.to_string())?;
+                writer
+                    .write_image_data(&region)
+                    .map_err(|e| e.to_string())?;
+                previous_indices = indices;
+                Ok(())
+            } else {
+                writer.write_image_data(&indices).map_err(|e| e.to_string())
+            }
         })?;
         writer
             .finish()
