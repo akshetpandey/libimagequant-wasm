@@ -255,3 +255,31 @@ export const compositedPixels = [
   [...green, ...red],
   [...clear, ...blue],
 ];
+
+// Repeat the real compressed frame streams without re-encoding source pixels.
+export function repeatApng(input, repetitions) {
+  const chunks = chunksOf(input);
+  const start = chunks.findIndex((c) => c.type === 'fcTL');
+  assert(start > 0);
+  const header = chunks.slice(0, start).map(({ type, data }) => {
+    data = Buffer.from(data);
+    if (type === 'acTL') data.writeUInt32BE(data.readUInt32BE(0) * repetitions);
+    return chunk(type, data);
+  });
+  let sequence = 0;
+  const body = [];
+  for (let cycle = 0; cycle < repetitions; cycle++) {
+    for (const original of chunks.slice(start)) {
+      let { type } = original;
+      let data = Buffer.from(original.data);
+      if (type === 'IEND') continue;
+      if (cycle && type === 'IDAT') {
+        type = 'fdAT';
+        data = Buffer.concat([Buffer.alloc(4), data]);
+      }
+      if (type === 'fcTL' || type === 'fdAT') data.writeUInt32BE(sequence++);
+      body.push(chunk(type, data));
+    }
+  }
+  return Buffer.concat([Buffer.from(input.subarray(0, 8)), ...header, ...body, chunk('IEND')]);
+}

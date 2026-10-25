@@ -99,11 +99,16 @@ impl ImageQuantizer {
         include_frame_data: Option<bool>,
     ) -> Result<Option<JsValue>, JsValue> {
         let bytes = png_bytes.to_vec();
-        let Some(animation) = animation::decode(&bytes).map_err(|e| JsValue::from_str(&e))? else {
+        let Some(result) = animation::quantize(
+            &bytes,
+            &self.attr,
+            dithering,
+            include_frame_data.unwrap_or(false),
+        )
+        .map_err(|e| JsValue::from_str(&e))?
+        else {
             return Ok(None);
         };
-        let result = animation::quantize(animation, &self.attr, dithering)
-            .map_err(|e| JsValue::from_str(&e))?;
         Ok(Some(animation_bindings::into_js(
             result,
             include_frame_data.unwrap_or(false),

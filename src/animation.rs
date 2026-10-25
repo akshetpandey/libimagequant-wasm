@@ -203,7 +203,19 @@ fn composite(
     Ok(())
 }
 
-pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
+#[derive(Clone, Copy)]
+struct Header {
+    width: u32,
+    height: u32,
+    num_plays: u32,
+    num_frames: u32,
+    separate_poster: bool,
+}
+
+fn visit(
+    data: &[u8],
+    mut frame: impl FnMut(Header, &[RGBA], Option<FrameControl>) -> Result<(), String>,
+) -> Result<Option<Header>, String> {
     // Animation chunks are ancillary to a static PNG decoder, but dropping one
     // can change or corrupt playback. Treat their checksum failures as errors.
     let mut options = DecodeOptions::default();
@@ -232,15 +244,21 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
             .ok_or("PNG output buffer size overflow")?
     ];
     let mut canvas = vec![RGBA::new(0, 0, 0, 0); count];
-    let mut poster = None;
-    let mut frames = Vec::with_capacity(control.num_frames as usize);
+    let header = Header {
+        width,
+        height,
+        num_plays: control.num_plays,
+        num_frames: control.num_frames,
+        separate_poster,
+    };
+    let mut frame_index = 0;
     for index in 0..control.num_frames as usize + usize::from(separate_poster) {
         let info = reader
             .next_frame(&mut buffer)
             .map_err(|e| format!("Failed to read APNG frame: {e}"))?;
         let pixels = frame_pixels(&buffer, &info, interlaced, width, height)?;
         if separate_poster && index == 0 {
-            poster = Some(pixels.into_owned());
+            frame(header, &pixels, None)?;
             continue;
         }
         let fc = reader
@@ -250,7 +268,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         if fc.width != info.width || fc.height != info.height {
             return Err("APNG frame dimensions do not match its control chunk".into());
         }
-        if frames.is_empty()
+        if frame_index == 0
             && !separate_poster
             && (fc.width != width || fc.height != height || fc.x_offset != 0 || fc.y_offset != 0)
         {
@@ -258,9 +276,9 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         }
         // No later frame observes final disposal. Initially the canvas is
         // transparent, so PREVIOUS is equivalent to BACKGROUND as APNG requires.
-        let disposal = if frames.len() + 1 == control.num_frames as usize {
+        let disposal = if frame_index + 1 == control.num_frames as usize {
             DisposeOp::None
-        } else if frames.is_empty() && fc.dispose_op == DisposeOp::Previous {
+        } else if frame_index == 0 && fc.dispose_op == DisposeOp::Previous {
             DisposeOp::Background
         } else {
             fc.dispose_op
@@ -276,11 +294,8 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
             saved
         });
         composite(&mut canvas, &pixels, fc, width, height)?;
-        frames.push(Frame {
-            pixels: canvas.clone(),
-            delay_num: fc.delay_num,
-            delay_den: fc.delay_den,
-        });
+        frame(header, &canvas, Some(fc))?;
+        frame_index += 1;
         match disposal {
             DisposeOp::None => {}
             DisposeOp::Previous => {
@@ -304,39 +319,55 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
     reader
         .finish()
         .map_err(|e| format!("Failed to finish APNG: {e}"))?;
-    Ok(Some(Animation {
-        width,
-        height,
-        num_plays: control.num_plays,
+    Ok(Some(header))
+}
+
+pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
+    let mut frames = Vec::new();
+    let mut poster = None;
+    let header = visit(data, |_, pixels, control| {
+        if let Some(fc) = control {
+            frames.push(Frame {
+                pixels: pixels.to_vec(),
+                delay_num: fc.delay_num,
+                delay_den: fc.delay_den,
+            });
+        } else {
+            poster = Some(pixels.to_vec());
+        }
+        Ok(())
+    })?;
+    Ok(header.map(|h| Animation {
+        width: h.width,
+        height: h.height,
+        num_plays: h.num_plays,
         poster,
         frames,
     }))
 }
 
 pub(crate) fn quantize(
-    mut animation: Animation,
+    data: &[u8],
     attr: &Attributes,
     dithering: Option<f64>,
-) -> Result<QuantizedAnimation, String> {
+    include_frame_data: bool,
+) -> Result<Option<QuantizedAnimation>, String> {
     if dithering.is_some_and(|d| !d.is_finite() || !(0.0..=1.0).contains(&d)) {
         return Err("dithering must be between 0 and 1".into());
     }
-    let width = animation.width as usize;
-    let height = animation.height as usize;
+    // Pass one retains the histogram, never the composited frame sequence.
     let mut histogram = Histogram::new(attr);
-    for pixels in animation
-        .poster
-        .iter()
-        .chain(animation.frames.iter().map(|f| &f.pixels))
-    {
-        let mut image = Image::new_borrowed(attr, pixels, width, height, 0.0)
+    let Some(header) = visit(data, |h, pixels, _| {
+        let mut image = Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, 0.0)
             .map_err(|e| format!("Failed to create APNG image: {e}"))?;
         histogram
             .add_image(attr, &mut image)
-            .map_err(|e| format!("Failed to collect APNG colors: {e}"))?;
-    }
-    // Histogram quantization freezes the palette: remapping later frames cannot
-    // invalidate earlier indices or the one shared APNG PLTE chunk.
+            .map_err(|e| format!("Failed to collect APNG colors: {e}"))
+    })?
+    else {
+        return Ok(None);
+    };
+    // Histogram quantization freezes the shared palette before any encoding.
     let mut result = histogram
         .quantize(attr)
         .map_err(|e| format!("Failed to quantize APNG: {e}"))?;
@@ -349,8 +380,15 @@ pub(crate) fn quantize(
     }
     let palette = result.palette().to_vec();
     let mut png = Vec::new();
+    let mut animation = Animation {
+        width: header.width,
+        height: header.height,
+        num_plays: header.num_plays,
+        poster: None,
+        frames: Vec::with_capacity(header.num_frames as usize),
+    };
     {
-        let mut encoder = Encoder::new(&mut png, animation.width, animation.height);
+        let mut encoder = Encoder::new(&mut png, header.width, header.height);
         encoder.set_color(ColorType::Indexed);
         encoder.set_depth(BitDepth::Eight);
         encoder.set_palette(
@@ -363,10 +401,10 @@ pub(crate) fn quantize(
             encoder.set_trns(palette[..=last].iter().map(|c| c.a).collect::<Vec<_>>());
         }
         encoder
-            .set_animated(animation.frames.len() as u32, animation.num_plays)
+            .set_animated(header.num_frames, header.num_plays)
             .map_err(|e| e.to_string())?;
         encoder
-            .set_sep_def_img(animation.poster.is_some())
+            .set_sep_def_img(header.separate_poster)
             .map_err(|e| e.to_string())?;
         encoder
             .set_blend_op(BlendOp::Source)
@@ -376,43 +414,50 @@ pub(crate) fn quantize(
             .map_err(|e| e.to_string())?;
         encoder.validate_sequence(true);
         let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-        let mut remap = |pixels: &mut Vec<RGBA>| -> Result<Vec<u8>, String> {
+        // Pass two remaps and writes one frame at a time. Only requested pixels
+        // and the default-image preview survive the callback.
+        visit(data, |h, pixels, control| {
             let indices = {
-                let mut image = Image::new_borrowed(attr, pixels, width, height, 0.0)
-                    .map_err(|e| e.to_string())?;
+                let mut image =
+                    Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, 0.0)
+                        .map_err(|e| e.to_string())?;
                 result
                     .remapped(&mut image)
                     .map_err(|e| format!("Failed to remap APNG: {e}"))?
                     .1
             };
-            for (pixel, &index) in pixels.iter_mut().zip(&indices) {
-                *pixel = palette[index as usize];
+            let retain = control.is_none()
+                || include_frame_data
+                || (!header.separate_poster && animation.frames.is_empty());
+            let pixels = if retain {
+                indices.iter().map(|&i| palette[i as usize]).collect()
+            } else {
+                Vec::new()
+            };
+            if let Some(fc) = control {
+                writer
+                    .set_frame_delay(fc.delay_num, fc.delay_den)
+                    .map_err(|e| e.to_string())?;
+                animation.frames.push(Frame {
+                    pixels,
+                    delay_num: fc.delay_num,
+                    delay_den: fc.delay_den,
+                });
+            } else {
+                animation.poster = Some(pixels);
             }
-            Ok(indices)
-        };
-        if let Some(poster) = &mut animation.poster {
-            writer
-                .write_image_data(&remap(poster)?)
-                .map_err(|e| e.to_string())?;
-        }
-        for frame in &mut animation.frames {
-            writer
-                .set_frame_delay(frame.delay_num, frame.delay_den)
-                .map_err(|e| e.to_string())?;
-            writer
-                .write_image_data(&remap(&mut frame.pixels)?)
-                .map_err(|e| e.to_string())?;
-        }
+            writer.write_image_data(&indices).map_err(|e| e.to_string())
+        })?;
         writer
             .finish()
             .map_err(|e| format!("Failed to finish APNG encoding: {e}"))?;
     }
-    Ok(QuantizedAnimation {
+    Ok(Some(QuantizedAnimation {
         animation,
         png,
         palette,
         quality,
-    })
+    }))
 }
 
 #[cfg(test)]

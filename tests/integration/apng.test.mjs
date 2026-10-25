@@ -23,6 +23,7 @@ import {
   blue,
   clear,
   inspectTransfers,
+  repeatApng,
 } from './apng-fixtures.mjs';
 
 wasm.initSync({
@@ -650,4 +651,52 @@ test('concurrent cold APNG calls own their frame arrays and preserve caller buff
   const bytes = [...b.animation.frames[0].imageData.data];
   a.animation.frames[0].imageData.data.fill(42);
   assert.deepEqual([...b.animation.frames[0].imageData.data], bytes);
+});
+
+test('two-pass real APNG processing bounds default WASM memory as frame count grows', async (t) => {
+  const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
+  const binary = await readFile(
+    new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url),
+  );
+  const peaks = [];
+  for (const repetitions of [1, 10]) {
+    const url = new URL('../../dist/wasm/libimagequant_wasm.js', import.meta.url);
+    url.searchParams.set('two-pass-memory', repetitions);
+    const raw = await import(url.href);
+    const { memory } = raw.initSync({ module: binary });
+    const q = new raw.ImageQuantizer();
+    try {
+      q.setMaxColors(64);
+      const result = q.quantizePngAnimation(repeatApng(input, repetitions), 0);
+      assert.equal(result.animation.frames.length, 20 * repetitions);
+      assert(result.animation.frames.every((f) => !f.imageData));
+      const encoded = parseIndexedApng(result.pngBytes);
+      assert.equal(encoded.frames.length, 20 * repetitions);
+      peaks.push(memory.buffer.byteLength);
+    } finally {
+      q.free();
+    }
+  }
+  t.diagnostic(`20/200 frame WASM high-water marks: ${peaks.join('/')} bytes`);
+  assert(peaks[1] - peaks[0] < 4 * 1024 * 1024, `frame-count-dependent WASM growth: ${peaks}`);
+});
+
+test('a second real APNG preserves every frame with compact and expanded results', async (t) => {
+  const input = await readFile(new URL('../fixtures/beach-ball-45.apng', import.meta.url));
+  const q = new NodeQuantizer();
+  t.after(() => q.dispose());
+  const source = wasm.decode_png_animation(input);
+  const compact = await q.quantizePng(input, { maxColors: 64, dithering: 0 });
+  const expanded = await q.quantizePng(input, {
+    maxColors: 64,
+    dithering: 0,
+    includeFrameData: true,
+  });
+  assert.equal(source.animation.frames.length, 20);
+  assert.deepEqual(compact.pngBytes, expanded.pngBytes);
+  const encoded = parseIndexedApng(compact.pngBytes);
+  for (const [i, frame] of encoded.frames.entries()) {
+    assert.deepEqual(frame.pixels, [...expanded.animation.frames[i].imageData.data]);
+    assert.equal(expanded.animation.frames[i].durationMs, source.animation.frames[i].durationMs);
+  }
 });

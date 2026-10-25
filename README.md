@@ -168,7 +168,8 @@ if (result.animation) {
 }
 ```
 
-By default, animation frames contain timing metadata only. Set `includeFrameData: true`
+APNG processing decodes twice: first to collect a shared palette, then to remap and
+encode one frame at a time. By default, animation frames contain timing metadata only. Set `includeFrameData: true`
 to also return every composited frame's pixels; this needs four bytes per canvas
 pixel per frame. `imageData` always contains one static/default preview. With frame
 pixels enabled, it shares the first frame's image data when `animation.defaultImageIsFrame`
@@ -197,7 +198,7 @@ Images are limited to 16,777,216 pixels (64 MiB of RGBA data). Resize larger ima
 before processing; actual working memory exceeds the raw image size.
 APNGs are limited to 1,000 frames and 67,108,864 total canvas pixels (256 MiB of
 RGBA data), counting the complete canvas per frame and any separate fallback.
-This bounds frame storage, rather than peak memory: quantization needs scratch
+This bounds processing work and opt-in pixel storage, rather than peak memory: quantization needs scratch
 space, and the worker's WASM heap retains its peak size until you call `dispose()`.
 
 ### Constructor options

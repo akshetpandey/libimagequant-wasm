@@ -39,7 +39,7 @@ These instructions apply to all coding agents working in this repository.
 ## Architecture
 
 - `src/lib.rs` wraps imagequant and PNG encoding/decoding with wasm-bindgen. It exports `ImageQuantizer`, `QuantizationResult`, and PNG helpers.
-- `src/animation.rs` validates APNG streams, composites offset/blended/disposed frames, generates a frozen shared palette, and writes full-canvas indexed APNG. `src/animation_bindings.rs` exposes owned frame arrays and self-contained WASM declarations.
+- `src/animation.rs` validates APNG streams, composites offset/blended/disposed frames, uses two decode passes with a frozen shared palette, and writes full-canvas indexed APNG. `src/animation_bindings.rs` exposes owned frame arrays and self-contained WASM declarations.
 - `src/index.ts` provides the browser `LibImageQuant` API and its embedded worker transport.
 - `src/client.ts` shares worker lifecycle, timeouts, and input handling across browser and Node clients. `src/types.ts` contains DOM-free shared contracts.
 - `src/node.ts` exposes the explicit `/node` entry point using `worker_threads`; `src/node-worker.ts` returns raw RGBA data without DOM globals. Node bundles may override the worker with an absolute URL to the `/node-worker` export.

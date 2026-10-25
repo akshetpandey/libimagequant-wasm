@@ -19,3 +19,10 @@ false mismatches.
 `png-16bit.json` contains small generated static PNG cases. Synthetic APNG cases
 in `tests/integration/apng-fixtures.mjs` supplement the real file with blend,
 disposal, bit-depth, interlace, and malformed-stream cases.
+
+`beach-ball-45.apng` is DiriectorDoc's 45 × 45, 20-frame **APNG bouncing beach ball**,
+downloaded unchanged under CC0. It provides a second independently authored real animation.
+
+- [Source and CC0 declaration](<https://commons.wikimedia.org/wiki/File:APNG_bouncing_beach_ball_(45px).png>)
+- [Original file](https://upload.wikimedia.org/wikipedia/commons/2/24/APNG_bouncing_beach_ball_%2845px%29.png)
+- SHA-256: `cbf0b58d8741a578fcd3e181584e7950123d0a02039009ef11d5707af117522d`
