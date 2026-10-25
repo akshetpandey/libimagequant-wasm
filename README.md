@@ -331,7 +331,9 @@ asset copying. Its Content Security Policy needs `blob:` workers and `data:` fet
 for the embedded WASM, along with permission to compile WebAssembly. Applications
 that require separately hosted workers can supply `workerUrl` and `wasmUrl`.
 Relative WASM paths resolve against an explicit worker URL, or against the page
-URL when using the default embedded worker.
+base URL (`document.baseURI`) when using the default embedded worker. Relative
+worker paths also respect `<base>`. Directory query parameters are forwarded to
+both the JavaScript loader and WASM binary.
 
 ### Performance Issues
 - Large images may take significant time to quantize

@@ -9,14 +9,15 @@ export type QuantizationResult = Result<ImageData>;
 export default class LibImageQuant extends QuantizerClient<ImageData> {
   constructor(options: LibImageQuantOptions = {}) {
     let wasmUrl = options.wasmUrl;
+    const documentUrl = globalThis.document?.baseURI ?? globalThis.location?.href;
+    const workerUrl = options.workerUrl ? new URL(options.workerUrl, documentUrl).href : undefined;
     if (wasmUrl) {
-      const pageUrl = globalThis.location.href;
-      const workerUrl = new URL(options.workerUrl || pageUrl, pageUrl);
-      const base = ['http:', 'https:'].includes(workerUrl.protocol) ? workerUrl.href : pageUrl;
+      const worker = workerUrl && new URL(workerUrl);
+      const base = worker && ['http:', 'https:'].includes(worker.protocol) ? worker.href : documentUrl;
       wasmUrl = new URL(wasmUrl, base).href;
     }
     super({ ...options, wasmUrl }, () => {
-      const worker = options.workerUrl ? new Worker(options.workerUrl, { type: 'module' }) : new DefaultWorker();
+      const worker = workerUrl ? new Worker(workerUrl, { type: 'module' }) : new DefaultWorker();
       const transport: WorkerTransport = {
         onmessage: null, onerror: null,
         postMessage: (message, transfer = []) => worker.postMessage(message, transfer),

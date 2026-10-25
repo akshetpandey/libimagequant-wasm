@@ -15,17 +15,19 @@ export async function loadWasm(customWasmUrl?: string): Promise<typeof bundledWa
       return wasmModule;
     }
     // Initialize the WASM module
-    if (/\.wasm(?:[?#]|$)/i.test(customWasmUrl)) {
-      await initializeBundledWasm({ module_or_path: new URL(customWasmUrl, import.meta.url).href });
+    const directory = new URL(customWasmUrl, import.meta.url);
+    if (directory.pathname.toLowerCase().endsWith('.wasm')) {
+      await initializeBundledWasm({ module_or_path: directory.href });
       wasmModule = bundledWasm;
       isInitialized = true;
       return wasmModule;
     }
-    const directory = new URL(customWasmUrl.replace(/\/?$/, '/'), import.meta.url);
-    const wasmLoaderPath = new URL('libimagequant_wasm.js', directory).href;
-    wasmModule = await import(wasmLoaderPath);
-    const binary = new URL('libimagequant_wasm_bg.wasm', directory).href;
-    await wasmModule.default({ module_or_path: binary });
+    if (!directory.pathname.endsWith('/')) directory.pathname += '/';
+    const loader = new URL('libimagequant_wasm.js', directory);
+    const binary = new URL('libimagequant_wasm_bg.wasm', directory);
+    loader.search = binary.search = directory.search;
+    wasmModule = await import(loader.href);
+    await wasmModule.default({ module_or_path: binary.href });
     isInitialized = true;
     return wasmModule;
   })().catch(error => {

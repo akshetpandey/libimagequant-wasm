@@ -105,11 +105,24 @@ for (const format of ['esm', 'cjs']) {
 }
 
 test('loads a custom WASM directory independently of the worker location', async () => {
-  for (const directory of ['/assets/', '/assets', new URL('/assets/', page.url()).href]) {
+  for (const directory of ['/assets/', '/assets', '/assets?v=1', '/assets?v=example.wasm', new URL('/assets/', page.url()).href]) {
     assert.deepEqual(await quantize({ workerUrl: '/relocated/worker.mjs', wasmUrl: directory }), {
       palette: [[255, 0, 0, 255]], width: 1, height: 1,
     });
   }
+});
+
+test('relative worker and WASM paths respect the document base URL', async () => {
+  await page.evaluate(() => {
+    const base = document.createElement('base');
+    base.href = '/dist/';
+    document.head.append(base);
+  });
+  try {
+    for (const workerUrl of [undefined, 'worker.mjs']) {
+      assert.equal((await quantize({ workerUrl, wasmUrl: 'wasm' })).width, 1);
+    }
+  } finally { await page.evaluate(() => document.querySelector('base').remove()); }
 });
 
 test('preserves binary-only WASM URL overrides', async () => {
