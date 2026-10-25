@@ -4,12 +4,13 @@ These instructions apply to all coding agents working in this repository.
 
 ## Toolchain and package management
 
-- Use Node.js 24 LTS (the exact development version is in `.node-version`).
+- Use the default Node.js 24 LTS version in `.node-version`, or the maintained Node.js 22 version allowed by `devEngines`. Published Node entries target Node.js 22.12+; keep their APIs and declarations compatible with Node 22.
 - Use the pnpm version pinned in `package.json`; commit `pnpm-lock.yaml` when dependencies change. Do not introduce other JavaScript lockfiles.
 - Node.js and pnpm requirements belong in `devEngines`: they apply to contributors building and testing the repository. The published browser library does not require consumers to use those tools.
 - Use the Rust version and `wasm32-unknown-unknown` target pinned in `rust-toolchain.toml`, with wasm-pack 0.15.0. Keep `Cargo.lock` committed and build against it with `--locked`.
 - Install JavaScript dependencies with `pnpm install --frozen-lockfile`.
 - Install the browser for tests with `pnpm exec playwright install chromium`.
+- Human setup and test instructions are in `DEVELOPMENT.md`; the release runbook is in `RELEASING.md`. Keep the README focused on installing and using the library.
 
 ## Commands
 
@@ -27,6 +28,7 @@ These instructions apply to all coding agents working in this repository.
 - `pnpm release <version> --dry-run` — validate and pack a release without public mutations.
 - `pnpm release <version>` — run the validated release pipeline, atomically push main/tag, and publish the exact tarball to npm. Requires explicit publishing authorization.
 - `pnpm test:integration` — run built-artifact and package-consumer regression tests after building.
+- `TEST_BROWSER=firefox node --test tests/integration/browser.test.mjs` — run browser integration tests in Firefox; use `webkit` for Safari's engine. Install these browsers with Playwright first.
 - `cargo check --locked --target wasm32-unknown-unknown` — check the Rust WASM implementation.
 - `cargo test --locked` — run native Rust tests (browser tests exercise the WASM API).
 - `pnpm dev` / `pnpm serve` — start the Vite server on port 8080.
@@ -46,6 +48,7 @@ These instructions apply to all coding agents working in this repository.
 - `scripts/build-wasm.mjs` is the shared locked release build for Vite, `build:wasm`, and `build.sh`. wasm-pack runs the sole wasm-opt pass configured in Cargo.toml. Do not add a second optimizer or enable unused WASM proposals.
 - `src/wasm-env.d.ts` provides module-local compatibility types prepended to generated WASM declarations. Keep browser-native WebAssembly types and Node consumers without DOM libraries working; do not introduce global DOM declarations.
 - `vite.config.ts` embeds a self-contained browser worker and builds browser and Node entries separately with their appropriate platform targets. It assembles ESM, CommonJS, source maps, and raw WASM assets in `dist/`.
+- Browser output targets Chrome/Edge 111, Firefox 114, and Safari/iOS 16.4 explicitly; Node output targets 22.12. Do not replace these with a moving or newer target without updating compatibility docs and testing the change.
 - `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser, plus Node worker lifecycle, production bundles, strict declaration consumers, and installed package artifacts.
 - `examples/` contains manual browser examples, the runnable Node PNG converter (`node examples/node.mjs input.png output.png`), and the package structure validator.
 
@@ -67,6 +70,7 @@ These instructions apply to all coding agents working in this repository.
 ## Validation and changes
 
 - After dependency or build changes, run the full build, typecheck, package validation, browser tests, and Rust checks above.
+- For runtime or WASM toolchain changes, exercise Node 22 and 24, plus Chromium, Firefox, and WebKit integration tests. Historical browser minimums are build/feature targets; the automated browser suite uses current Playwright engines.
 - Preserve the package's ESM, CommonJS, worker, type declaration, and WASM exports in `package.json`.
 - Keep build tooling portable: use executables from `PATH` and repository-relative paths.
 - Update the README and this file when changing development commands or requirements. Generated `dist/`, `pkg/`, and `target/` output should not be committed.
