@@ -1,5 +1,4 @@
 import { Worker } from 'node:worker_threads';
-import { pathToFileURL } from 'node:url';
 import QuantizerClient, { type WorkerTransport } from './client.js';
 import type { LibImageQuantOptions as ClientOptions, QuantizationResult as Result, RgbaImageData } from './types.js';
 
@@ -17,8 +16,9 @@ class ThreadTransport implements WorkerTransport {
   private thread: Worker;
 
   constructor(workerUrl?: URL) {
-    // __filename covers the CommonJS build without relying on import.meta there.
-    const base = typeof __filename === 'string' ? pathToFileURL(__filename).href : import.meta.url;
+    // The Node-platform build preserves this in ESM and supplies the correct
+    // __filename-based URL in CommonJS, without consulting application globals.
+    const base = import.meta.url;
     // The bundled worker needs no app loaders or process-specific CLI flags.
     this.thread = new Worker(workerUrl ?? new URL('./node-worker.mjs', base), { execArgv: [] });
     this.thread.on('message', data => this.onmessage?.({ data }));

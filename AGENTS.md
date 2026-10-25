@@ -7,14 +7,14 @@ These instructions apply to all coding agents working in this repository.
 - Use Node.js 24 LTS (the exact development version is in `.node-version`).
 - Use the pnpm version pinned in `package.json`; commit `pnpm-lock.yaml` when dependencies change. Do not introduce other JavaScript lockfiles.
 - Node.js and pnpm requirements belong in `devEngines`: they apply to contributors building and testing the repository. The published browser library does not require consumers to use those tools.
-- Rust, the `wasm32-unknown-unknown` target, and wasm-pack 0.15.0 or newer are required. Keep `Cargo.lock` committed and build against it with `--locked`.
+- Use the Rust version and `wasm32-unknown-unknown` target pinned in `rust-toolchain.toml`, with wasm-pack 0.15.0. Keep `Cargo.lock` committed and build against it with `--locked`.
 - Install JavaScript dependencies with `pnpm install --frozen-lockfile`.
 - Install the browser for tests with `pnpm exec playwright install chromium`.
 
 ## Commands
 
 - `pnpm build` — clean and build WASM, ESM, CommonJS, source maps, and TypeScript declarations into `dist/`.
-- `pnpm build:wasm` — build only the WASM module into `dist/wasm/`.
+- `pnpm build:wasm` — build WASM into `pkg/` and copy the four public raw assets into `dist/wasm/`. Run the full build to refresh embedded worker bundles.
 - `pnpm build:types` — generate TypeScript declarations.
 - `pnpm typecheck` — check TypeScript without emitting files.
 - `pnpm test` — run the Vitest suite in headless Chromium against the built output. Run `pnpm build` first.
@@ -25,7 +25,7 @@ These instructions apply to all coding agents working in this repository.
 - `cargo test --locked` — run native Rust tests (browser tests exercise the WASM API).
 - `pnpm dev` / `pnpm serve` — start the Vite server on port 8080.
 - `pnpm test:manual` — build and serve the examples; open `/examples/test.html`.
-- `pnpm clean` — remove `dist/` and `target/`.
+- `pnpm clean` — remove `dist/` and `pkg/`, preserving Rust's build cache. Use `cargo clean` to clear that cache explicitly.
 - `./build.sh` — standalone WASM build into `pkg/`.
 
 ## Architecture
@@ -36,7 +36,8 @@ These instructions apply to all coding agents working in this repository.
 - `src/node.ts` exposes the explicit `/node` entry point using `worker_threads`; `src/node-worker.ts` returns raw RGBA data without DOM globals.
 - `src/quantize.ts` shares quantization and PNG conversion. `src/wasm.ts` shares the in-flight WASM loader.
 - `src/worker.ts` loads the WASM module and processes quantization messages outside the main thread.
-- `vite.config.ts` builds WASM with wasm-pack, embeds a self-contained default worker, bundles both JavaScript formats with Vite/Rolldown, and copies optional externally hosted WASM assets to `dist/wasm/`.
+- `scripts/build-wasm.mjs` is the shared locked release build for Vite, `build:wasm`, and `build.sh`. wasm-pack runs the sole wasm-opt pass configured in Cargo.toml. Do not add a second optimizer or enable unused WASM proposals.
+- `vite.config.ts` embeds a self-contained browser worker and builds browser and Node entries separately with their appropriate platform targets. It assembles ESM, CommonJS, source maps, and raw WASM assets in `dist/`.
 - `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser.
 - `examples/` contains manual browser examples and the package structure validator.
 

@@ -1,125 +1,63 @@
-import { defineConfig, build as buildVite } from 'vite'
-import { resolve } from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { defineConfig, build as buildVite, type Plugin } from 'vite'
+import { resolve } from 'node:path'
+import { cp, writeFile } from 'node:fs/promises'
+import { buildWasm, copyWasm, root } from './scripts/build-wasm.mjs'
 
-const execFileAsync = promisify(execFile)
-
-const wasmResolver = () => ({
+const wasmResolver = (): Plugin => ({
   name: 'wasm-module',
-  resolveId(id: string) {
-    if (id === 'virtual:libimagequant-wasm') return resolve(import.meta.dirname, 'pkg/libimagequant_wasm.js')
+  resolveId(id) {
+    if (id === 'virtual:libimagequant-wasm') return resolve(root, 'pkg/libimagequant_wasm.js')
   }
 })
 
-// Plugin to build WASM
-const wasmPlugin = () => {
-  let hasBuiltWasm = false;
-  let hasProcessed = false;
+const worker = { format: 'es' as const, plugins: () => [wasmResolver()] }
 
-  return {
-    name: 'wasm-build',
-    renderChunk(_code, chunk, output) {
-      if (chunk.name === 'worker' && output.format === 'cjs') {
-        // A browser worker has a module URL only in ESM. Delegate rather than
-        // emitting an implementation with erased import.meta.url expressions.
-        return { code: "void import('./worker.mjs');\n", map: { mappings: '' } }
-      }
-    },
-    buildStart: async () => {
-      if (hasBuiltWasm) return;
-      hasBuiltWasm = true;
-      console.log('Building WASM module...')
-      try {
-        // Generate bindings before either bundle or the embedded worker resolves them.
-        const { stderr } = await execFileAsync('wasm-pack', ['build', '--target', 'web', '--out-dir', 'pkg', '--', '--locked'])
-        if (stderr) console.warn('WASM build warnings:', stderr)
-        await buildVite({
-          configFile: false, plugins: [wasmResolver()], logLevel: 'warn',
-          build: {
-            lib: { entry: resolve(import.meta.dirname, 'src/node-worker.ts'), formats: ['es'], fileName: () => 'node-worker.mjs' },
-            outDir: 'pkg/node-worker', emptyOutDir: false, assetsInlineLimit: Infinity,
-            target: 'node24', minify: true, sourcemap: true,
-            rolldownOptions: { platform: 'node', external: [/^node:/] }
-          }
-        })
-        console.log('WASM build completed')
-      } catch (error) {
-        console.error('WASM build failed:', error)
-        throw error
-      }
-    },
-    writeBundle: async () => {
-      // Only process once (this hook is called for each format)
-      if (hasProcessed) return;
-      hasProcessed = true;
-
-      try {
-        // Create dist/wasm directory
-        await mkdir('dist/wasm', { recursive: true })
-
-        // Copy only the WASM-specific files (not LICENSE, README.md, package.json)
-        const filesToCopy = [
-          'libimagequant_wasm.js',
-          'libimagequant_wasm_bg.wasm',
-          'libimagequant_wasm.d.ts',
-          'libimagequant_wasm_bg.wasm.d.ts'
-        ]
-
-        for (const file of filesToCopy) {
-          await copyFile(`pkg/${file}`, `dist/wasm/${file}`)
-        }
-        for (const file of ['node-worker.mjs', 'node-worker.mjs.map']) {
-          await copyFile(`pkg/node-worker/${file}`, `dist/${file}`)
-        }
-
-        console.log('WASM files copied to dist/wasm')
-      } catch (error) {
-        console.error('WASM copy failed:', error)
-        throw error
-      }
-    }
+// Node and browser outputs need different platform handling for import.meta
+// and built-in modules. Stage them independently before assembling dist/.
+async function buildAuxiliaryBundles() {
+  for (const { entry, formats, directory, platform, target } of [
+    { entry: 'node', formats: ['es', 'cjs'] as const, directory: 'node', platform: 'node' as const, target: 'node24' },
+    { entry: 'node-worker', formats: ['es'] as const, directory: 'node-worker', platform: 'node' as const, target: 'node24' },
+    { entry: 'index', formats: ['cjs'] as const, directory: 'browser-cjs', platform: 'browser' as const, target: 'es2025' },
+  ]) {
+    await buildVite({
+      configFile: false, root, publicDir: false, plugins: [wasmResolver()], worker, logLevel: 'warn',
+      build: {
+        lib: { entry: resolve(root, `src/${entry}.ts`), formats: [...formats],
+          fileName: format => `${entry}.${format === 'es' ? 'mjs' : 'cjs'}` },
+        outDir: resolve(root, `pkg/${directory}`), emptyOutDir: true,
+        assetsInlineLimit: Infinity, target, minify: true, sourcemap: true,
+        rolldownOptions: { platform, external: [/^node:/] },
+      },
+    })
   }
 }
 
+const wasmPlugin = (): Plugin => ({
+  name: 'wasm-build',
+  async buildStart() {
+    await buildWasm()
+    await buildAuxiliaryBundles()
+  },
+  async writeBundle() {
+    await copyWasm('dist/wasm')
+    for (const directory of ['node', 'node-worker', 'browser-cjs']) {
+      await cp(resolve(root, `pkg/${directory}`), resolve(root, 'dist'), { recursive: true })
+    }
+    // A browser worker implementation must be ESM to retain its module URL.
+    await writeFile(resolve(root, 'dist/worker.cjs'), "void import('./worker.mjs');\n")
+  },
+})
+
 export default defineConfig({
-  plugins: [wasmPlugin(), wasmResolver()],
-  worker: { format: 'es', plugins: () => [wasmResolver()] },
+  plugins: [wasmPlugin(), wasmResolver()], worker,
   build: {
     assetsInlineLimit: Infinity,
     lib: {
-      entry: {
-        index: resolve(import.meta.dirname, 'src/index.ts'),
-        worker: resolve(import.meta.dirname, 'src/worker.ts'),
-        node: resolve(import.meta.dirname, 'src/node.ts'),
-      },
-      name: 'LibImageQuant',
-      formats: ['es', 'cjs'],
-      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'cjs'}`
+      entry: { index: resolve(root, 'src/index.ts'), worker: resolve(root, 'src/worker.ts') },
+      formats: ['es'], fileName: (_format, entry) => `${entry}.mjs`,
     },
-    rolldownOptions: {
-      external: ['fs', 'path', 'url', /^node:/],
-      output: {
-        preserveModules: false,
-        globals: {
-          'fs': 'fs',
-          'path': 'path',
-          'url': 'url'
-        }
-      }
-    },
-    target: 'es2025',
-    minify: true,
-    sourcemap: true
+    target: 'es2025', minify: true, sourcemap: true,
   },
-  resolve: {
-    alias: {
-      '@': resolve(import.meta.dirname, 'src')
-    }
-  },
-  server: {
-    port: 8080,
-    host: true
-  }
+  server: { port: 8080, host: true },
 })

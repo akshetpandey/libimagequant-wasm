@@ -209,11 +209,11 @@ larger images before quantization; actual working memory exceeds the RGBA size.
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) with the `wasm32-unknown-unknown` target
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) 0.15.0 or newer
+- [Rust](https://rustup.rs/) 1.94.1 with the `wasm32-unknown-unknown` target (pinned in `rust-toolchain.toml`)
+- [wasm-pack](https://wasm-bindgen.github.io/wasm-pack/) 0.15.0
 - Node.js 24 LTS (^24.22.1; see `.node-version` and `devEngines.runtime` in `package.json`)
 - [pnpm](https://pnpm.io/installation) 12.15.0 (pinned in `package.json`)
-- [wasm-opt](https://github.com/WebAssembly/binaryen) (optional, for WASM size optimization)
+- wasm-pack manages [wasm-opt](https://github.com/WebAssembly/binaryen), using an installed Binaryen binary or its downloaded cache
 
 ### Setup
 
@@ -221,7 +221,8 @@ larger images before quantization; actual working memory exceeds the RGBA size.
 # Install Rust and wasm-pack
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cargo install wasm-pack --locked --version 0.15.0
-rustup target add wasm32-unknown-unknown
+# rustup reads rust-toolchain.toml and installs its compiler and target
+rustup show
 
 # Install dependencies
 pnpm install --frozen-lockfile
@@ -247,6 +248,19 @@ pnpm build
 | `pnpm test:watch` | Run tests in watch mode |
 | `pnpm dev` | Start Vite dev server |
 | `pnpm clean` | Remove build output |
+
+All WASM builds use `scripts/build-wasm.mjs`, `--release`, `--target web`, and
+`--locked`. wasm-pack selects the wasm-bindgen CLI matching `Cargo.lock` and
+applies the single `-Oz` optimization pass from `Cargo.toml`. The web target's
+explicit initialization works in both workers; Node does not require a separate
+WASI or native addon build. Browser and Node JavaScript are bundled separately
+with ES2025 and Node 24 targets. The Rust compiler is pinned because its default
+WebAssembly feature set can change between releases.
+
+`pnpm build:wasm` refreshes the raw assets in `dist/wasm/`; run `pnpm build` to
+refresh the embedded workers too. `./build.sh` builds the same WASM into `pkg/`.
+`pnpm clean` removes `dist/` and `pkg/` while preserving Rust's incremental cache;
+use `cargo clean` to clear that cache.
 
 ## Testing
 

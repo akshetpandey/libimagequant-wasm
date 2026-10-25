@@ -108,6 +108,7 @@ test('byte views preserve offsets and input ownership across worker transfers', 
 test('Node works from eval input and exits after disposal', async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
     import Quantizer from 'libimagequant-wasm/node';
+    globalThis.__filename = '/not-the-package/application.cjs';
     const q = new Quantizer();
     try { console.log((await q.quantizeImageData({ data: new Uint8ClampedArray([255,0,0,255]), width:1, height:1 })).width); }
     finally { q.dispose(); }
