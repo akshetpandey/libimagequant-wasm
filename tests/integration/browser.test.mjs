@@ -164,6 +164,85 @@ test('the default constructor works without copying worker or WASM assets', asyn
   assert.deepEqual(await quantize({}), { palette: [[255, 0, 0, 255]], width: 1, height: 1 });
 });
 
+test('the real beach-ball APNG agrees with native source and output decoding', async () => {
+  const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
+  const checked = await page.evaluate(
+    async (bytes) => {
+      const { default: Quantizer } = await import('/dist/index.mjs');
+      const raw = await import('/dist/wasm/libimagequant_wasm.js');
+      await raw.default();
+      const source = new Uint8Array(bytes);
+      const decoded = raw.decode_png_animation(source);
+      const q = new Quantizer();
+      try {
+        const result = await q.quantizePng(source, { maxColors: 64, dithering: 0 });
+        const counts = [decoded.animation.frames.length, result.animation.frames.length];
+        const nativeErrors = [];
+        const durations = [];
+        if (globalThis.ImageDecoder) {
+          for (const [png, expected] of [
+            [source, decoded.animation.frames],
+            [result.pngBytes, result.animation.frames],
+          ]) {
+            const decoder = new ImageDecoder({
+              data: png,
+              type: 'image/png',
+              preferAnimation: true,
+            });
+            let worst = 0;
+            try {
+              await decoder.completed;
+              await decoder.tracks.ready;
+              counts.push(decoder.tracks.selectedTrack.frameCount);
+              for (let i = 0; i < decoder.tracks.selectedTrack.frameCount; i++) {
+                const { image } = await decoder.decode({ frameIndex: i });
+                try {
+                  durations.push(image.duration);
+                  const pixels = new Uint8Array(100 * 100 * 4);
+                  await image.copyTo(pixels, { format: 'RGBA' });
+                  const wanted = expected[i].imageData.data;
+                  for (let p = 0; p < pixels.length; p++) {
+                    const alpha = p - (p % 4) + 3;
+                    const a =
+                      p % 4 === 3 ? pixels[p] : Math.round((pixels[p] * pixels[alpha]) / 255);
+                    const b =
+                      p % 4 === 3 ? wanted[p] : Math.round((wanted[p] * wanted[alpha]) / 255);
+                    worst = Math.max(worst, Math.abs(a - b));
+                  }
+                } finally {
+                  image.close();
+                }
+              }
+            } finally {
+              decoder.close();
+            }
+            nativeErrors.push(worst);
+          }
+        }
+        return {
+          counts,
+          nativeErrors,
+          durations,
+          nativeImages: result.animation.frames.every((f) => f.imageData instanceof ImageData),
+          plays: result.animation.numPlays,
+          delays: result.animation.frames.map((f) => f.durationMs),
+        };
+      } finally {
+        q.dispose();
+      }
+    },
+    [...input],
+  );
+  assert.equal(checked.nativeImages, true);
+  assert.equal(checked.plays, 0);
+  assert.deepEqual(checked.delays, Array(20).fill(75));
+  assert(checked.counts.every((n) => n === 20));
+  if (browserName === 'chromium') {
+    assert.deepEqual(checked.nativeErrors, [0, 0]);
+    assert.deepEqual(checked.durations, Array(40).fill(75000));
+  }
+});
+
 test('browser APNG results retain a separate native fallback and independent frames', async () => {
   const images = await page.evaluate(
     async (bytes) => {

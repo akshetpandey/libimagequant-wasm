@@ -86,6 +86,10 @@ The test suite covers:
 - **Result validation** - Color accuracy, PNG integrity, transparency roundtrips
 - **APNG** - Shared palettes, timing and loop counts, fallback images, blend/disposal modes, interlaced subframes, resource limits, and independent decoding of encoded frames
 
+APNG coverage includes a checked-in real 20-frame animation, with provenance in
+[tests/fixtures/README.md](tests/fixtures/README.md). Chromium's native decoder
+validates its source compositing and every encoded output frame.
+
 ### Compatibility checks
 
 The published Node entries support Node 22.12+ and are checked with Node 22

@@ -69,6 +69,39 @@ for (const [format, Q] of [
   ['ESM', Quantizer],
   ['CommonJS', common],
 ]) {
+  test(`${format} converts the real 20-frame beach-ball APNG without losing frames or colors`, async (t) => {
+    const q = new Q();
+    t.after(() => q.dispose());
+    const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
+    const original = wasm.decode_png_animation(input);
+    const result = await q.quantizePng(input, { maxColors: 64, dithering: 0 });
+    const encoded = parseIndexedApng(result.pngBytes);
+    assert.deepEqual([result.width, result.height, encoded.frames.length], [100, 100, 20]);
+    assert.equal(result.animation.numPlays, 0);
+    assert.equal(result.animation.defaultImageIsFrame, true);
+    assert.equal(result.imageData, result.animation.frames[0].imageData);
+    assert(result.paletteLength <= 64);
+    assert.deepEqual(encoded.palette, result.palette);
+    assert.equal(new Set(result.animation.frames.map((f) => f.imageData.data.buffer)).size, 20);
+    for (const [i, frame] of encoded.frames.entries()) {
+      assert.deepEqual(frame.delay, [75, 1000]);
+      const output = result.animation.frames[i];
+      assert.equal(output.durationMs, 75);
+      assert.deepEqual(frame.pixels, [...output.imageData.data]);
+      const source = original.animation.frames[i].imageData.data;
+      let error = 0;
+      for (let p = 0; p < source.length; p++) {
+        const alpha = p - (p % 4) + 3;
+        const difference =
+          p % 4 === 3
+            ? source[p] - frame.pixels[p]
+            : (source[p] * source[alpha] - frame.pixels[p] * frame.pixels[alpha]) / 255;
+        error += difference * difference;
+      }
+      assert(error / source.length < 25, `frame ${i} lost visible colors`);
+    }
+  });
+
   test(`${format} preserves APNG compositing, timing, plays, and a shared palette`, async (t) => {
     const q = new Q();
     t.after(() => q.dispose());
