@@ -2,6 +2,7 @@ import { loadWasm } from './wasm.js';
 import {
   quantizePng,
   quantizeImageData,
+  transferResultBuffers,
   type PngQuantizationData,
   type ImageDataQuantizationData,
 } from './quantize.js';
@@ -65,7 +66,12 @@ self.onmessage = async function (e: MessageEvent<WorkerMessage | ConfigureMessag
         throw new Error(`Unknown action: ${action}`);
     }
 
-    result.imageData = new ImageData(result.imageData.data, result.width, result.height);
+    for (const frame of result.animation?.frames ?? []) {
+      frame.imageData = new ImageData(frame.imageData.data, result.width, result.height);
+    }
+    result.imageData = result.animation?.defaultImageIsFrame
+      ? result.animation.frames[0].imageData
+      : new ImageData(result.imageData.data, result.width, result.height);
 
     // Send success response
     self.postMessage(
@@ -74,7 +80,7 @@ self.onmessage = async function (e: MessageEvent<WorkerMessage | ConfigureMessag
         success: true,
         result,
       },
-      [result.pngBytes.buffer, result.imageData.data.buffer],
+      transferResultBuffers(result),
     );
   } catch (error) {
     // Send error response

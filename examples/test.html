@@ -150,7 +150,12 @@
       <h3>Load PNG Image</h3>
       <div class="file-drop-area" id="fileDropArea">
         <p>Drop a PNG file here or click to select</p>
-        <input type="file" id="imageInput" accept="image/png" style="display: none" />
+        <input
+          type="file"
+          id="imageInput"
+          accept="image/png,image/apng,.png,.apng"
+          style="display: none"
+        />
       </div>
       <button onclick="createSamplePng()">Create Sample PNG</button>
     </div>
@@ -295,8 +300,11 @@
       });
 
       async function loadPngFromFile(file) {
-        if (!file.type.startsWith('image/png')) {
-          showMessage('Please select a PNG file', 'error');
+        if (
+          !['image/png', 'image/apng'].includes(file.type) &&
+          !/\.(?:png|apng)$/i.test(file.name)
+        ) {
+          showMessage('Please select a PNG or APNG file', 'error');
           return;
         }
 
@@ -417,6 +425,7 @@
           document.getElementById('quantizedInfo').innerHTML = `
                     Dimensions: ${lastResult.width} × ${lastResult.height}<br>
                     Colors: ${lastResult.paletteLength}<br>
+                    ${lastResult.animation ? `Animation: ${lastResult.animation.frames.length} frames, ${lastResult.animation.numPlays || 'infinite'} plays<br>` : ''}
                     Quality: ${Math.round(lastResult.quality * 100)}%<br>
                     PNG size: ${formatBytes(quantizedSize)}<br>
                     Size reduction: ${sizeReduction > 0 ? '+' : ''}${sizeReduction}%<br>

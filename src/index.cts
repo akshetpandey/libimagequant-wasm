@@ -4,6 +4,14 @@ declare const LibImageQuant: typeof import(
   { with: { 'resolution-mode': 'import' } }
 ).default;
 declare namespace LibImageQuant {
+  type AnimationFrame = import(
+    './index.js',
+    { with: { 'resolution-mode': 'import' } }
+  ).AnimationFrame;
+  type QuantizedAnimation = import(
+    './index.js',
+    { with: { 'resolution-mode': 'import' } }
+  ).QuantizedAnimation;
   type QuantizationOptions = import(
     './index.js',
     { with: { 'resolution-mode': 'import' } }

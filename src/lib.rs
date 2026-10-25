@@ -4,6 +4,9 @@ use png::{BitDepth, ColorType, Decoder, Encoder, Transformations};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
+mod animation;
+mod animation_bindings;
+
 fn checked_integer(value: f64, min: u32, max: u32, name: &str) -> Result<u32, JsValue> {
     if !value.is_finite() || value.fract() != 0.0 || value < min as f64 || value > max as f64 {
         return Err(JsValue::from_str(&format!(
@@ -85,6 +88,22 @@ impl ImageQuantizer {
         self.attr
             .set_min_posterization(posterization as u8)
             .map_err(|e| JsValue::from_str(&format!("Failed to set posterization: {:?}", e)))
+    }
+
+    /// Quantize all APNG frames with one palette; undefined for a static PNG.
+    #[wasm_bindgen(js_name = quantizePngAnimation, unchecked_return_type = "PngAnimationQuantizationResult | undefined")]
+    pub fn quantize_png_animation(
+        &self,
+        png_bytes: &Uint8Array,
+        dithering: Option<f64>,
+    ) -> Result<Option<JsValue>, JsValue> {
+        let bytes = png_bytes.to_vec();
+        let Some(animation) = animation::decode(&bytes).map_err(|e| JsValue::from_str(&e))? else {
+            return Ok(None);
+        };
+        let result = animation::quantize(animation, &self.attr, dithering)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(Some(animation_bindings::into_js(result)?))
     }
 
     #[wasm_bindgen(js_name = quantizeImage)]
@@ -269,7 +288,17 @@ impl QuantizationResult {
     }
 }
 
-// PNG helper functions
+/// Decode all composited APNG frames without quantization; undefined for static PNG.
+#[wasm_bindgen(unchecked_return_type = "DecodedPngAnimation | undefined")]
+pub fn decode_png_animation(png_bytes: &Uint8Array) -> Result<Option<JsValue>, JsValue> {
+    let bytes = png_bytes.to_vec();
+    let Some(animation) = animation::decode(&bytes).map_err(|e| JsValue::from_str(&e))? else {
+        return Ok(None);
+    };
+    Ok(Some(animation_bindings::decoded_into_js(&animation)?))
+}
+
+/// Decode the static/default PNG image, including the fallback image in an APNG.
 #[wasm_bindgen(unchecked_return_type = "[Uint8ClampedArray<ArrayBuffer>, number, number]")]
 pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
     let data: Vec<u8> = png_bytes.to_vec();

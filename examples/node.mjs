@@ -11,6 +11,11 @@ if (!input || !output) {
     const result = await quantizer.quantizePng(await readFile(input), { maxColors: 64 });
     await writeFile(output, result.pngBytes);
     console.log(`${result.width}x${result.height}, ${result.paletteLength} colors → ${output}`);
+    if (result.animation) {
+      console.log(
+        `${result.animation.frames.length} frames, ${result.animation.numPlays || 'infinite'} plays`,
+      );
+    }
   } finally {
     quantizer.dispose();
   }

@@ -1,6 +1,6 @@
 # libimagequant-wasm
 
-Quantize PNGs and RGBA images into indexed PNGs with up to 256 colors and alpha transparency.
+Quantize PNGs, animated PNGs, and RGBA images into indexed PNGs with up to 256 colors and alpha transparency.
 Uses [libimagequant](https://github.com/ImageOptim/libimagequant) compiled to WebAssembly,
 with processing in a browser worker or Node.js worker thread. Includes TypeScript declarations,
 ES modules, and CommonJS exports.
@@ -151,6 +151,30 @@ const quantizer = new LibImageQuant({
 
 `workerEnv` replaces the full worker environment; the parent environment is unchanged.
 
+## Animated PNG
+
+`quantizePng` preserves APNG animation automatically. Its `pngBytes` contain an
+indexed APNG with one palette shared across all frames, retaining frame delays,
+loop count, and a separate static fallback image when present.
+
+```typescript
+const result = await quantizer.quantizePng(input, { maxColors: 64 });
+if (result.animation) {
+  console.log(result.animation.numPlays); // 0 means infinite looping
+  for (const frame of result.animation.frames) {
+    // Full canvas: native ImageData in browsers, plain RGBA data in Node.
+    console.log(frame.imageData, frame.durationMs);
+  }
+}
+```
+
+`imageData` is the static/default preview. It shares the first frame's image data
+when `animation.defaultImageIsFrame` is true; otherwise it is a separate fallback.
+Frames are composited using the input's blending and disposal rules, then encoded
+as complete canvases rather than preserving source delta rectangles. Each frame
+exposes its original `delayNumerator` and `delayDenominator`; a denominator of zero
+means 100. Static PNG results have no `animation` property.
+
 ## API
 
 Both entry points expose the same methods:
@@ -163,11 +187,13 @@ Both entry points expose the same methods:
 
 Each call snapshots byte inputs and options; your buffers are never detached.
 Blob reading is covered by the operation timeout and disposal. Each result owns its output arrays.
-PNG input is decoded to RGBA8; APNG input processes only the first decoded image.
-Output PNGs do not preserve source metadata.
+PNG and APNG input is normalized to RGBA8. Source metadata other than APNG
+animation controls is not preserved.
 
 Images are limited to 16,777,216 pixels (64 MiB of RGBA data). Resize larger images
 before processing; actual working memory exceeds the raw image size.
+APNGs are limited to 1,000 frames and 67,108,864 total canvas pixels (256 MiB of
+RGBA data), counting the complete canvas per frame and any separate fallback.
 
 ### Constructor options
 
@@ -210,6 +236,7 @@ call `dispose()` when finished.
 | `paletteLength`   | Number of colors in the palette                                        |
 | `quality`         | Achieved quality, `0–1`                                                |
 | `width`, `height` | Image dimensions in pixels                                             |
+| `animation`       | APNG only: `{ numPlays, defaultImageIsFrame, frames }`                 |
 
 ### Raw WASM
 
@@ -228,6 +255,11 @@ const [rgba, width, height] = decode_png_to_rgba(await readFile('input.png'));
 Keep the JavaScript glue and WASM from the same build. Low-level `ImageQuantizer`
 and `QuantizationResult` objects require `free()` in `finally` blocks; the high-level
 API manages those allocations for you.
+
+`decode_png_to_rgba` reads the static/default image. For all unquantized APNG
+frames, use `decode_png_animation(bytes)`. For shared-palette APNG output, use
+`ImageQuantizer.quantizePngAnimation(bytes, dithering?)` after configuring the
+quantizer. Both animation methods return `undefined` for static PNG input.
 
 ## Browser support and deployment
 

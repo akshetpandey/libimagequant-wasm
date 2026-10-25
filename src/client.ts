@@ -184,7 +184,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
   }
 
   /**
-   * Quantize a PNG from bytes or Blob
+   * Quantize a PNG from bytes or Blob, preserving APNG animation.
    */
   async quantizePng(
     pngData: Uint8Array | ArrayBuffer | Blob,

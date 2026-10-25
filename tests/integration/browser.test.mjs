@@ -7,6 +7,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { chromium, firefox, webkit } from 'playwright';
+import {
+  compositingApng,
+  compositedPixels,
+  parseIndexedApng,
+  makeApng,
+  red,
+  green,
+  blue,
+  clear,
+} from './apng-fixtures.mjs';
 
 const browserTypes = { chromium, firefox, webkit };
 const browserName = process.env.TEST_BROWSER ?? 'chromium';
@@ -86,8 +96,117 @@ async function quantize(requestOptions) {
   }, requestOptions);
 }
 
+test('APNG retains all frames through browser workers and native decoding', async () => {
+  const browserResult = await page.evaluate(
+    async (bytes) => {
+      const { default: Quantizer } = await import('/dist/index.mjs');
+      const q = new Quantizer();
+      try {
+        const result = await q.quantizePng(new Uint8Array(bytes), { maxColors: 8, dithering: 0 });
+        const nativeFrames = [];
+        const Decoder = globalThis.ImageDecoder;
+        if (Decoder) {
+          const decoder = new Decoder({
+            data: result.pngBytes,
+            type: 'image/png',
+            preferAnimation: true,
+          });
+          try {
+            await decoder.tracks.ready;
+            for (let i = 0; i < decoder.tracks.selectedTrack.frameCount; i++) {
+              const { image } = await decoder.decode({ frameIndex: i });
+              try {
+                const pixels = new Uint8Array(result.width * result.height * 4);
+                await image.copyTo(pixels, { format: 'RGBA' });
+                nativeFrames.push([...pixels]);
+              } finally {
+                image.close();
+              }
+            }
+          } finally {
+            decoder.close();
+          }
+        }
+        return {
+          bytes: [...result.pngBytes],
+          frames: result.animation.frames.map((f) => [...f.imageData.data]),
+          nativeImageData: result.animation.frames.every((f) => f.imageData instanceof ImageData),
+          sharedPreview: result.imageData === result.animation.frames[0].imageData,
+          plays: result.animation.numPlays,
+          nativeFrames,
+        };
+      } finally {
+        q.dispose();
+      }
+    },
+    [...compositingApng()],
+  );
+  assert.equal(browserResult.nativeImageData, true);
+  assert.equal(browserResult.sharedPreview, true);
+  assert.equal(browserResult.plays, 3);
+  const encoded = parseIndexedApng(browserResult.bytes);
+  assert.deepEqual(
+    encoded.frames.map((f) => f.pixels),
+    browserResult.frames,
+  );
+  for (const [i, frame] of browserResult.frames.entries()) {
+    for (let channel = 0; channel < frame.length; channel++) {
+      assert(Math.abs(frame[channel] - compositedPixels[i][channel]) <= 1);
+    }
+  }
+  if (browserName === 'chromium') {
+    assert.equal(browserResult.nativeFrames.length, 4);
+    assert.deepEqual(browserResult.nativeFrames, browserResult.frames);
+  }
+});
+
 test('the default constructor works without copying worker or WASM assets', async () => {
   assert.deepEqual(await quantize({}), { palette: [[255, 0, 0, 255]], width: 1, height: 1 });
+});
+
+test('browser APNG results retain a separate native fallback and independent frames', async () => {
+  const images = await page.evaluate(
+    async (bytes) => {
+      const { default: Quantizer } = await import('/dist/index.mjs');
+      const q = new Quantizer();
+      try {
+        const result = await q.quantizePng(new Uint8Array(bytes), { maxColors: 8, dithering: 0 });
+        const frames = result.animation.frames.map((frame) => frame.imageData);
+        return {
+          native: [result.imageData, ...frames].every((image) => image instanceof ImageData),
+          separate: !result.animation.defaultImageIsFrame && result.imageData !== frames[0],
+          distinctBuffers: new Set([result.imageData, ...frames].map((image) => image.data.buffer))
+            .size,
+          preview: [...result.imageData.data],
+          frames: frames.map((image) => [...image.data]),
+        };
+      } finally {
+        q.dispose();
+      }
+    },
+    [
+      ...makeApng({
+        poster: [...green, ...green],
+        frames: [
+          { width: 1, x: 1, samples: blue, dispose: 2 },
+          { width: 1, x: 0, samples: red },
+        ],
+      }),
+    ],
+  );
+  assert.equal(images.native, true);
+  assert.equal(images.separate, true);
+  assert.equal(images.distinctBuffers, 3);
+  assert.deepEqual(images.preview, [...green, ...green]);
+  for (const [i, expected] of [
+    [...clear, ...blue],
+    [...red, ...clear],
+  ].entries()) {
+    for (let channel = 0; channel < expected.length; channel++) {
+      if (channel % 4 !== 3 && expected[channel - (channel % 4) + 3] === 0) continue;
+      assert(Math.abs(images.frames[i][channel] - expected[channel]) <= 1);
+    }
+  }
 });
 
 test('browser transfers preserve caller buffers and accept iframe byte views', async () => {

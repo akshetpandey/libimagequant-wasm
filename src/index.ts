@@ -2,7 +2,12 @@
 // oxlint-disable-next-line import/default -- Vite provides this virtual module's worker constructor.
 import DefaultWorker from './worker?worker&inline';
 import QuantizerClient, { type WorkerTransport } from './client.js';
-import type { LibImageQuantOptions, QuantizationResult as Result } from './types.js';
+import type {
+  LibImageQuantOptions,
+  QuantizationResult as Result,
+  AnimationFrame as Frame,
+  QuantizedAnimation as Animation,
+} from './types.js';
 
 export type {
   QuantizationOptions,
@@ -11,6 +16,8 @@ export type {
   RgbaImageInput,
 } from './types.js';
 export type QuantizationResult = Result<ImageData>;
+export type AnimationFrame = Frame<ImageData>;
+export type QuantizedAnimation = Animation<ImageData>;
 
 export default class LibImageQuant extends QuantizerClient<ImageData> {
   constructor(options: LibImageQuantOptions = {}) {

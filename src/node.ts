@@ -4,6 +4,8 @@ import type {
   LibImageQuantOptions as ClientOptions,
   QuantizationResult as Result,
   RgbaImageData,
+  AnimationFrame as Frame,
+  QuantizedAnimation as Animation,
 } from './types.js';
 
 export type { QuantizationOptions, RgbaImageData, RgbaImageInput } from './types.js';
@@ -14,6 +16,8 @@ export type LibImageQuantOptions = Pick<ClientOptions, 'initTimeout' | 'operatio
   workerEnv?: Record<string, string | undefined>;
 };
 export type QuantizationResult = Result<RgbaImageData>;
+export type AnimationFrame = Frame<RgbaImageData>;
+export type QuantizedAnimation = Animation<RgbaImageData>;
 
 class ThreadTransport implements WorkerTransport {
   onmessage: WorkerTransport['onmessage'] = null;

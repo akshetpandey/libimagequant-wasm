@@ -84,6 +84,7 @@ The test suite covers:
 - **Node and packaging** - Worker startup/exit, malformed messages, byte ownership, server bundling, and published declarations
 - **Low-level WASM** - `ImageQuantizer`, `QuantizationResult`, PNG encode/decode, memory management
 - **Result validation** - Color accuracy, PNG integrity, transparency roundtrips
+- **APNG** - Shared palettes, timing and loop counts, fallback images, blend/disposal modes, interlaced subframes, resource limits, and independent decoding of encoded frames
 
 ### Compatibility checks
 

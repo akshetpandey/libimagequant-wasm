@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { compositingApng } from './apng-fixtures.mjs';
 
 const exec = promisify(execFile);
 
@@ -201,6 +202,52 @@ test('an externalized Vite SSR consumer runs without relocating the worker', asy
   assert.equal(await run(), 1);
 });
 
+for (const nodeOnly of [false, true]) {
+  for (const extension of ['mts', 'cts']) {
+    test(`${nodeOnly ? 'Node' : 'browser'} ${extension} exposes typed APNG frames`, async () => {
+      const entry = nodeOnly ? 'libimagequant-wasm/node' : 'libimagequant-wasm';
+      await typecheck(
+        `import type { QuantizationResult, QuantizedAnimation, AnimationFrame } from '${entry}';
+        import type { RgbaImageData } from '${entry}';
+        function inspect(result: QuantizationResult) {
+          const animation: QuantizedAnimation | undefined = result.animation;
+          const frame: AnimationFrame | undefined = animation?.frames[0];
+          if (frame) {
+            const image: ${nodeOnly ? 'RgbaImageData' : 'ImageData'} = frame.imageData;
+            const bytes: Uint8ClampedArray<ArrayBuffer> = image.data;
+            const duration: number = frame.durationMs;
+            console.log(bytes, duration);
+          }
+        }
+        void inspect;`,
+        extension,
+        nodeOnly,
+      );
+    });
+  }
+}
+
+test('raw APNG declarations retain owned buffers and match the Node result contract', async () => {
+  await typecheck(
+    `import { ImageQuantizer, decode_png_animation, type DecodedPngAnimation, type PngAnimationQuantizationResult } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
+    import type { QuantizationResult } from 'libimagequant-wasm/node';
+    const decoded: DecodedPngAnimation | undefined = decode_png_animation(Buffer.from([]));
+    const pixels: Uint8ClampedArray<ArrayBuffer> | undefined = decoded?.animation.frames[0].imageData.data;
+    console.log(pixels);
+    const q = new ImageQuantizer();
+    try {
+      const raw: PngAnimationQuantizationResult | undefined = q.quantizePngAnimation(Buffer.from([]), 0);
+      const result: QuantizationResult | undefined = raw;
+      if (result?.animation) {
+        const blob: Blob = new Blob([result.animation.frames[0].imageData.data]);
+        console.log(blob);
+      }
+    } finally { q.free(); }`,
+    'mts',
+    true,
+  );
+});
+
 for (const format of ['es', 'cjs']) {
   test(`a bundled Node ${format} consumer can locate the exported worker`, async () => {
     const entry = join(directory, `node-${format}.mjs`);
@@ -269,6 +316,7 @@ test('the packed package runs from a strict npm consumer installation', async ()
     ],
     { cwd: consumer },
   );
+  await writeFile(join(consumer, 'input.apng'), compositingApng());
   const { stdout } = await exec(
     process.execPath,
     [
@@ -277,12 +325,15 @@ test('the packed package runs from a strict npm consumer installation', async ()
       `
     import Quantizer from 'libimagequant-wasm/node';
     import { createRequire } from 'node:module';
+    import { readFile } from 'node:fs/promises';
     const common = createRequire(import.meta.url)('libimagequant-wasm/node');
     for (const Q of [Quantizer, common]) {
       const q = new Q();
       try {
         const result = await q.quantizeImageData({ data: new Uint8ClampedArray([255,0,0,255]), width:1, height:1 });
         console.log(result.width);
+        const animated = await q.quantizePng(await readFile('input.apng'));
+        console.log(animated.animation.frames.length, animated.animation.numPlays);
       } finally { q.dispose(); }
     }
     console.log(typeof (await import('libimagequant-wasm')).default);
@@ -290,5 +341,5 @@ test('the packed package runs from a strict npm consumer installation', async ()
     ],
     { cwd: consumer, timeout: 5000 },
   );
-  assert.deepEqual(stdout.trim().split(/\r?\n/), ['1', '1', 'function']);
+  assert.deepEqual(stdout.trim().split(/\r?\n/), ['1', '4 3', '1', '4 3', 'function']);
 });

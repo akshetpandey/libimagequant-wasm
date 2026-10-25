@@ -3,6 +3,7 @@ import { loadWasm } from './wasm.js';
 import {
   quantizePng,
   quantizeImageData,
+  transferResultBuffers,
   type PngQuantizationData,
   type ImageDataQuantizationData,
 } from './quantize.js';
@@ -25,10 +26,7 @@ port.on('message', async (message: Request) => {
     else if (message.action === 'quantize_imagedata')
       result = await quantizeImageData(wasm, message.data);
     else throw new Error('Unknown quantization action');
-    port.postMessage({ id, success: true, result }, [
-      result.pngBytes.buffer,
-      result.imageData.data.buffer,
-    ]);
+    port.postMessage({ id, success: true, result }, transferResultBuffers(result));
   } catch (error) {
     port.postMessage({
       id,
