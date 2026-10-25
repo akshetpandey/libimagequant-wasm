@@ -6,6 +6,7 @@ A TypeScript/JavaScript WebAssembly wrapper for the [libimagequant](https://gith
 
 - **High-quality image quantization** - Convert 24/32-bit images to 8-bit palette with alpha channel
 - **Web Worker support** - Non-blocking image processing using Web Workers
+- **Node.js support** - Separate worker-thread API with Buffer and raw RGBA inputs
 - **TypeScript support** - Full TypeScript definitions included
 - **Promise-based API** - Modern, easy-to-use async interface
 - **Optimized WASM** - Size and performance optimized WebAssembly build
@@ -89,6 +90,33 @@ const result = await quantizer.quantizePng(blob);
 ```
 
 ## API Reference
+
+### Node.js
+
+Node.js 24+ applications can use the separate worker-thread entry point. It runs
+the same WASM quantizer without browser globals or extra runtime dependencies:
+
+```typescript
+import LibImageQuant from 'libimagequant-wasm/node';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const quantizer = new LibImageQuant();
+try {
+  const result = await quantizer.quantizePng(await readFile('input.png'), { maxColors: 64 });
+  await writeFile('output.png', result.pngBytes);
+  // result.imageData is { data: Uint8ClampedArray, width, height } in Node.
+} finally {
+  quantizer.dispose(); // terminate the worker thread
+}
+```
+
+CommonJS: `const LibImageQuant = require('libimagequant-wasm/node')`.
+`quantizePng` accepts `Buffer`, `Uint8Array`, `ArrayBuffer`, and `Blob` inputs.
+`quantizeImageData` accepts `{ data: Uint8ClampedArray, width, height }` for raw
+RGBA input. The Node constructor accepts `initTimeout` and `operationTimeout`;
+worker and WASM assets are resolved from the installed package. Its prebuilt
+worker does not inherit application-specific CLI loaders or flags. Dispose of
+each instance when finished, and reuse it for multiple requests.
 
 ### LibImageQuant
 
@@ -223,12 +251,10 @@ The test suite covers:
 
 ## Browser Support
 
-Requires WebAssembly and Web Worker support:
-
-- Chrome 57+
-- Firefox 52+
-- Safari 11+
-- Edge 16+
+Use a modern browser supporting ES modules, module Web Workers, and WebAssembly.
+The published JavaScript targets ES2025. The default embedded worker requires
+`blob:` workers and `data:` fetches permitted by Content Security Policy; a
+separately hosted worker can be configured with `workerUrl`.
 
 ## Performance Tips
 
@@ -276,11 +302,12 @@ Ensure the worker module is served from the same origin, or pass a custom `worke
 `wasmUrl` names the directory containing both `libimagequant_wasm.js` and
 `libimagequant_wasm_bg.wasm`. Absolute URLs and paths relative to the worker are
 supported. For example, `{ workerUrl: '/workers/worker.mjs', wasmUrl: '/assets/quantizer/' }`.
-A URL ending in `.wasm` overrides only the binary; the JavaScript loader stays
-next to the worker's default `wasm/` directory.
+A URL ending in `.wasm` overrides only the binary and uses the bundled JavaScript
+loader. Use a directory override when providing matching external glue and WASM.
 
 The default worker embeds its JavaScript and WASM, so ordinary usage requires no
-asset copying. Allow `blob:` workers in your Content Security Policy. Applications
+asset copying. Its Content Security Policy needs `blob:` workers and `data:` fetches
+for the embedded WASM, along with permission to compile WebAssembly. Applications
 that require separately hosted workers can supply `workerUrl` and `wasmUrl`.
 Relative WASM paths resolve against an explicit worker URL, or against the page
 URL when using the default embedded worker.

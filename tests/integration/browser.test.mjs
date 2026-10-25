@@ -97,7 +97,9 @@ test('loads a custom WASM directory independently of the worker location', async
 });
 
 test('preserves binary-only WASM URL overrides', async () => {
-  assert.equal((await quantize({ workerUrl: '/dist/worker.mjs', wasmUrl: '/assets/libimagequant_wasm_bg.wasm' })).width, 1);
+  for (const workerUrl of [undefined, '/dist/worker.mjs', '/relocated/worker.mjs']) {
+    assert.equal((await quantize({ workerUrl, wasmUrl: '/assets/libimagequant_wasm_bg.wasm' })).width, 1);
+  }
 });
 
 test('the CommonJS worker entry delegates to a working module worker', async () => {

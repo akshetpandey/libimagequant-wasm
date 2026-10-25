@@ -4,5 +4,6 @@ declare namespace LibImageQuant {
   type QuantizationOptions = import('./index.js', { with: { 'resolution-mode': 'import' } }).QuantizationOptions;
   type QuantizationResult = import('./index.js', { with: { 'resolution-mode': 'import' } }).QuantizationResult;
   type LibImageQuantOptions = import('./index.js', { with: { 'resolution-mode': 'import' } }).LibImageQuantOptions;
+  type RgbaImageData = import('./index.js', { with: { 'resolution-mode': 'import' } }).RgbaImageData;
 }
 export = LibImageQuant;

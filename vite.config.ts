@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, build as buildVite } from 'vite'
 import { resolve } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -35,6 +35,15 @@ const wasmPlugin = () => {
         // Generate bindings before either bundle or the embedded worker resolves them.
         const { stderr } = await execFileAsync('wasm-pack', ['build', '--target', 'web', '--out-dir', 'pkg', '--', '--locked'])
         if (stderr) console.warn('WASM build warnings:', stderr)
+        await buildVite({
+          configFile: false, plugins: [wasmResolver()], logLevel: 'warn',
+          build: {
+            lib: { entry: resolve(import.meta.dirname, 'src/node-worker.ts'), formats: ['es'], fileName: () => 'node-worker.mjs' },
+            outDir: 'pkg/node-worker', emptyOutDir: false, assetsInlineLimit: Infinity,
+            target: 'node24', minify: true, sourcemap: true,
+            rolldownOptions: { platform: 'node', external: [/^node:/] }
+          }
+        })
         console.log('WASM build completed')
       } catch (error) {
         console.error('WASM build failed:', error)
@@ -61,6 +70,9 @@ const wasmPlugin = () => {
         for (const file of filesToCopy) {
           await copyFile(`pkg/${file}`, `dist/wasm/${file}`)
         }
+        for (const file of ['node-worker.mjs', 'node-worker.mjs.map']) {
+          await copyFile(`pkg/node-worker/${file}`, `dist/${file}`)
+        }
 
         console.log('WASM files copied to dist/wasm')
       } catch (error) {
@@ -80,13 +92,14 @@ export default defineConfig({
       entry: {
         index: resolve(import.meta.dirname, 'src/index.ts'),
         worker: resolve(import.meta.dirname, 'src/worker.ts'),
+        node: resolve(import.meta.dirname, 'src/node.ts'),
       },
       name: 'LibImageQuant',
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'cjs'}`
     },
     rolldownOptions: {
-      external: ['fs', 'path', 'url'],
+      external: ['fs', 'path', 'url', /^node:/],
       output: {
         preserveModules: false,
         globals: {

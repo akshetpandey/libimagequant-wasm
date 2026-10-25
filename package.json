@@ -19,6 +19,10 @@
       "require": "./dist/worker.cjs",
       "default": "./dist/worker.mjs"
     },
+    "./node": {
+      "import": { "types": "./dist/node.d.ts", "default": "./dist/node.mjs" },
+      "require": { "types": "./dist/node.d.cts", "default": "./dist/node.cjs" }
+    },
     "./wasm/libimagequant_wasm.js": {
       "types": "./dist/wasm/libimagequant_wasm.d.ts",
       "default": "./dist/wasm/libimagequant_wasm.js"

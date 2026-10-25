@@ -31,7 +31,10 @@ These instructions apply to all coding agents working in this repository.
 ## Architecture
 
 - `src/lib.rs` wraps imagequant and PNG encoding/decoding with wasm-bindgen. It exports `ImageQuantizer`, `QuantizationResult`, and PNG helpers.
-- `src/index.ts` provides the promise-based `LibImageQuant` API, worker lifecycle, timeouts, and PNG/ImageData input handling.
+- `src/index.ts` provides the browser `LibImageQuant` API and its embedded worker transport.
+- `src/client.ts` shares worker lifecycle, timeouts, and input handling across browser and Node clients. `src/types.ts` contains DOM-free shared contracts.
+- `src/node.ts` exposes the explicit `/node` entry point using `worker_threads`; `src/node-worker.ts` returns raw RGBA data without DOM globals.
+- `src/quantize.ts` shares quantization and PNG conversion. `src/wasm.ts` shares the in-flight WASM loader.
 - `src/worker.ts` loads the WASM module and processes quantization messages outside the main thread.
 - `vite.config.ts` builds WASM with wasm-pack, embeds a self-contained default worker, bundles both JavaScript formats with Vite/Rolldown, and copies optional externally hosted WASM assets to `dist/wasm/`.
 - `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser.
