@@ -1,10 +1,8 @@
 //! APNG compositing and shared-palette encoding, independent of JavaScript.
+use crate::metadata::{self, Policy};
 use imagequant::{Attributes, Histogram, Image, RGBA};
-use png::{
-    BitDepth, BlendOp, ColorType, DecodeOptions, Decoder, DisposeOp, Encoder, FrameControl,
-    Transformations,
-};
-use std::{borrow::Cow, io::Cursor};
+use png::{BitDepth, BlendOp, ColorType, DisposeOp, Encoder, FrameControl};
+use std::borrow::Cow;
 
 const MAX_ANIMATION_FRAMES: u32 = 1000;
 const MAX_ANIMATION_PIXELS: usize = 67_108_864;
@@ -47,7 +45,7 @@ fn dimensions(width: u32, height: u32, frames: u32, poster: bool) -> Result<usiz
 
 // Reader::finish validates the trailing stream but doesn't compare acTL's frame
 // count with the actual fcTL count. Never silently discard undeclared frames.
-fn validate_chunks(data: &[u8], expected_frames: Option<u32>) -> Result<(), String> {
+pub(crate) fn validate_chunks(data: &[u8], expected_frames: Option<u32>) -> Result<(), String> {
     let mut offset = 8usize;
     let mut frames = 0u32;
     let mut controls = 0;
@@ -109,7 +107,7 @@ fn over(target: &mut RGBA, source: RGBA) {
     );
 }
 
-fn frame_pixels<'a>(
+pub(crate) fn frame_pixels<'a>(
     buf: &'a [u8],
     info: &png::OutputInfo,
     interlaced: bool,
@@ -210,18 +208,17 @@ struct Header {
     num_plays: u32,
     num_frames: u32,
     separate_poster: bool,
+    gamma: f64,
 }
 
 fn visit(
     data: &[u8],
+    policy: Policy,
     mut frame: impl FnMut(Header, &[RGBA], Option<FrameControl>) -> Result<(), String>,
-) -> Result<Option<Header>, String> {
+) -> Result<Option<(Header, png::Info<'static>)>, String> {
     // Animation chunks are ancillary to a static PNG decoder, but dropping one
     // can change or corrupt playback. Treat their checksum failures as errors.
-    let mut options = DecodeOptions::default();
-    options.set_skip_ancillary_crc_failures(false);
-    let mut decoder = Decoder::new_with_options(Cursor::new(data), options);
-    decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
+    let decoder = metadata::decoder(data, policy);
     let mut reader = decoder
         .read_info()
         .map_err(|e| format!("Failed to read PNG info: {e}"))?;
@@ -250,6 +247,7 @@ fn visit(
         num_plays: control.num_plays,
         num_frames: control.num_frames,
         separate_poster,
+        gamma: metadata::gamma(reader.info()),
     };
     let mut frame_index = 0;
     for index in 0..control.num_frames as usize + usize::from(separate_poster) {
@@ -319,13 +317,13 @@ fn visit(
     reader
         .finish()
         .map_err(|e| format!("Failed to finish APNG: {e}"))?;
-    Ok(Some(header))
+    Ok(Some((header, metadata::select(reader.info(), policy)?)))
 }
 
 pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
     let mut frames = Vec::new();
     let mut poster = None;
-    let header = visit(data, |_, pixels, control| {
+    let header = visit(data, Policy::None, |_, pixels, control| {
         if let Some(fc) = control {
             frames.push(Frame {
                 pixels: pixels.to_vec(),
@@ -337,7 +335,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         }
         Ok(())
     })?;
-    Ok(header.map(|h| Animation {
+    Ok(header.map(|(h, _)| Animation {
         width: h.width,
         height: h.height,
         num_plays: h.num_plays,
@@ -395,15 +393,17 @@ pub(crate) fn quantize(
     attr: &Attributes,
     dithering: Option<f64>,
     include_frame_data: bool,
+    policy: Policy,
 ) -> Result<Option<QuantizedAnimation>, String> {
     if dithering.is_some_and(|d| !d.is_finite() || !(0.0..=1.0).contains(&d)) {
         return Err("dithering must be between 0 and 1".into());
     }
     // Pass one retains the histogram, never the composited frame sequence.
     let mut histogram = Histogram::new(attr);
-    let Some(header) = visit(data, |h, pixels, _| {
-        let mut image = Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, 0.0)
-            .map_err(|e| format!("Failed to create APNG image: {e}"))?;
+    let Some((header, info)) = visit(data, policy, |h, pixels, _| {
+        let mut image =
+            Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, h.gamma)
+                .map_err(|e| format!("Failed to create APNG image: {e}"))?;
         histogram
             .add_image(attr, &mut image)
             .map_err(|e| format!("Failed to collect APNG colors: {e}"))
@@ -432,7 +432,7 @@ pub(crate) fn quantize(
         frames: Vec::with_capacity(header.num_frames as usize),
     };
     {
-        let mut encoder = Encoder::new(&mut png, header.width, header.height);
+        let mut encoder = Encoder::with_info(&mut png, info).map_err(|e| e.to_string())?;
         encoder.set_color(ColorType::Indexed);
         encoder.set_depth(BitDepth::Eight);
         encoder.set_palette(
@@ -461,10 +461,10 @@ pub(crate) fn quantize(
         let mut previous_indices = Vec::new();
         // Pass two remaps and writes one frame at a time. Only requested pixels
         // and the default-image preview survive the callback.
-        visit(data, |h, pixels, control| {
+        visit(data, Policy::None, |h, pixels, control| {
             let indices = {
                 let mut image =
-                    Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, 0.0)
+                    Image::new_borrowed(attr, pixels, h.width as usize, h.height as usize, h.gamma)
                         .map_err(|e| e.to_string())?;
                 result
                     .remapped(&mut image)

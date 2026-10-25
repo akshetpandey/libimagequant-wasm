@@ -20,10 +20,16 @@ export interface DecodedPngAnimation {
         }>;
     };
 }
-export interface PngAnimationQuantizationResult {
+export interface PngQuantizationResult {
     imageData: { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number };
     width: number;
     height: number;
+    palette: number[][];
+    pngBytes: Uint8Array<ArrayBuffer>;
+    quality: number;
+    paletteLength: number;
+}
+export interface PngAnimationQuantizationResult extends PngQuantizationResult {
     animation: {
         numPlays: number;
         defaultImageIsFrame: boolean;
@@ -34,10 +40,6 @@ export interface PngAnimationQuantizationResult {
             durationMs: number;
         }>;
     };
-    palette: number[][];
-    pngBytes: Uint8Array<ArrayBuffer>;
-    quality: number;
-    paletteLength: number;
 }
 "#;
 
@@ -120,8 +122,29 @@ pub(crate) fn into_js(
     include_frame_data: bool,
 ) -> Result<JsValue, JsValue> {
     let object = decoded_into_js(&result.animation, include_frame_data)?;
+    finish_result(object, &result.png, &result.palette, result.quality)
+}
+
+pub(crate) fn static_into_js(result: crate::png_input::ResultImage) -> Result<JsValue, JsValue> {
+    let object = object(&[
+        (
+            "imageData",
+            image(&result.pixels, result.width, result.height)?,
+        ),
+        ("width", result.width.into()),
+        ("height", result.height.into()),
+    ])?;
+    finish_result(object, &result.png, &result.palette, result.quality)
+}
+
+fn finish_result(
+    object: JsValue,
+    png: &[u8],
+    colors: &[RGBA],
+    quality: f64,
+) -> Result<JsValue, JsValue> {
     let palette = Array::new();
-    for color in &result.palette {
+    for color in colors {
         let rgba = Array::new();
         for value in [color.r, color.g, color.b, color.a] {
             rgba.push(&value.into());
@@ -130,9 +153,9 @@ pub(crate) fn into_js(
     }
     for (name, value) in [
         ("palette", JsValue::from(palette)),
-        ("pngBytes", Uint8Array::from(result.png.as_slice()).into()),
-        ("quality", result.quality.into()),
-        ("paletteLength", (result.palette.len() as u32).into()),
+        ("pngBytes", Uint8Array::from(png).into()),
+        ("quality", quality.into()),
+        ("paletteLength", (colors.len() as u32).into()),
     ] {
         Reflect::set(&object, &name.into(), &value)?;
     }

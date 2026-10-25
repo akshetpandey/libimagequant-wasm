@@ -42,8 +42,9 @@ test('Node APNG workers transfer every owned buffer exactly once', async () => {
     parentPort.postMessage = (${inspectTransfers})(parentPort.postMessage.bind(parentPort));
     await import(${JSON.stringify(import.meta.resolve('libimagequant-wasm/node-worker'))});
   `;
-  for (const [input, expected] of [
+  for (const [input, expected, includeFrameData = true] of [
     [await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url)), 21],
+    [await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url)), 2, false],
     [makeApng({ poster: [...red, ...red], frames: [{ samples: [...blue, ...green] }] }), 3],
   ]) {
     const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(script)}`), {
@@ -55,12 +56,16 @@ test('Node APNG workers transfer every owned buffer exactly once', async () => {
       worker.postMessage({
         id: 1,
         action: 'quantize_png',
-        data: { pngBytes: input, options: { includeFrameData: true } },
+        data: { pngBytes: input, options: { includeFrameData } },
       });
       const [response] = (await messages.next()).value;
       assert.equal(response.success, true);
       assert(response.result.pngBytes.byteLength > 0);
-      assert(response.result.animation.frames.every((f) => f.imageData.data.byteLength > 0));
+      assert(
+        response.result.animation.frames.every((f) =>
+          includeFrameData ? f.imageData.data.byteLength > 0 : !f.imageData,
+        ),
+      );
       const [report] = (await messages.next()).value;
       assert.deepEqual(report, {
         type: 'transfer-inspection',
@@ -662,17 +667,25 @@ test('two-pass real APNG processing bounds default WASM memory as frame count gr
     new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url),
   );
   const peaks = [];
-  for (const repetitions of [1, 10]) {
+  for (const [repetitions, includeFrameData] of [
+    [1, false],
+    [10, false],
+    [10, true],
+  ]) {
     const url = new URL('../../dist/wasm/libimagequant_wasm.js', import.meta.url);
-    url.searchParams.set('two-pass-memory', repetitions);
+    url.searchParams.set('two-pass-memory', `${repetitions}-${includeFrameData}`);
     const raw = await import(url.href);
     const { memory } = raw.initSync({ module: binary });
     const q = new raw.ImageQuantizer();
     try {
       q.setMaxColors(64);
-      const result = q.quantizePngAnimation(repeatApng(input, repetitions), 0);
+      const result = q.quantizePngAnimation(repeatApng(input, repetitions), 0, includeFrameData);
       assert.equal(result.animation.frames.length, 20 * repetitions);
-      assert(result.animation.frames.every((f) => !f.imageData));
+      const frameBytes = result.animation.frames.reduce(
+        (sum, f) => sum + (f.imageData?.data.byteLength ?? 0),
+        0,
+      );
+      assert.equal(frameBytes, includeFrameData ? 100 * 100 * 4 * 20 * repetitions : 0);
       const encoded = parseIndexedApng(result.pngBytes);
       assert.equal(encoded.frames.length, 20 * repetitions);
       peaks.push(memory.buffer.byteLength);
@@ -680,7 +693,9 @@ test('two-pass real APNG processing bounds default WASM memory as frame count gr
       q.free();
     }
   }
-  t.diagnostic(`20/200 frame WASM high-water marks: ${peaks.join('/')} bytes`);
+  t.diagnostic(
+    `20/200 compact + 200 expanded frame WASM high-water marks: ${peaks.join('/')} bytes`,
+  );
   assert(peaks[1] - peaks[0] < 4 * 1024 * 1024, `frame-count-dependent WASM growth: ${peaks}`);
 });
 

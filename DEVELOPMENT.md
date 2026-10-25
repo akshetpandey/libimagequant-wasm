@@ -118,3 +118,20 @@ Chromium, Firefox, and WebKit engines, rather than historical browser binaries.
 Do not claim that a JavaScript target alone guarantees WebAssembly compatibility.
 
 See [RELEASING.md](RELEASING.md) for publishing.
+
+### APNG memory and output regression tests
+
+The integration suite uses two checked-in real APNG files with independent authorship.
+Chromium's native decoder compares all source and quantized frames; Node independently
+checks PNG filters, palette indices, checksums, frame rectangles, and timing. Synthetic
+cases cover source/over blending, all disposal modes, interlace, bit depths, and malformed input.
+
+The memory test repeats the real compressed beach-ball frame streams to compare 20 and
+200 frames in fresh WASM instances. It checks the WASM heap high-water mark and separately
+counts returned frame-pixel bytes for compact and opt-in results. This is not a total
+process-memory measurement: input/output bytes, JavaScript objects, decoder state, the
+color histogram, and requested pixel buffers also contribute. The default pipeline keeps
+one compositing canvas and bounded frame scratch space; encoded output and timing records
+grow with the animation. `includeFrameData: true` additionally retains four bytes per canvas
+pixel per frame in Rust during processing and returns owned JavaScript copies. A worker's
+WASM heap retains its peak capacity until disposal.

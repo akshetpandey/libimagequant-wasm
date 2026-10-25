@@ -32,12 +32,12 @@ export async function quantizePng(
         pngData,
         options.dithering,
         options.includeFrameData,
+        options.metadata,
       );
       if (!animation) throw new Error('Missing APNG animation control');
       return animation;
     }
-    const [rgba, width, height] = wasmModule.decode_png_to_rgba(pngData);
-    return quantizeRgbaData(wasmModule, quantizer, rgba, width, height, options.dithering);
+    return quantizer.quantizePng(pngData, options.dithering, options.metadata);
   });
 }
 
@@ -71,6 +71,8 @@ function withQuantizer<T>(
 ): T {
   if (options.includeFrameData !== undefined && typeof options.includeFrameData !== 'boolean')
     throw new TypeError('includeFrameData must be a boolean');
+  if (options.metadata !== undefined && !['safe', 'all', 'none'].includes(options.metadata))
+    throw new TypeError("metadata must be 'safe', 'all', or 'none'");
   const quantizer = new wasm.ImageQuantizer();
   try {
     if (options.speed !== undefined) quantizer.setSpeed(options.speed);

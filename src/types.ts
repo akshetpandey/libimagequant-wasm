@@ -14,6 +14,8 @@ export interface QuantizationOptions {
   posterization?: number;
   /** Include full composited APNG frame pixels (default: false). */
   includeFrameData?: boolean;
+  /** PNG metadata: compatible color/density by default; all also retains text/EXIF. */
+  metadata?: 'safe' | 'all' | 'none';
 }
 
 /** Raw RGBA input, including Node Buffers and shared-memory byte views. */

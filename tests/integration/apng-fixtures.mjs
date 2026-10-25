@@ -297,3 +297,14 @@ export function repeatApng(input, repetitions) {
   }
   return Buffer.concat([Buffer.from(input.subarray(0, 8)), ...header, ...body, chunk('IEND')]);
 }
+
+export function addMetadata(input, before = [], after = []) {
+  const chunks = chunksOf(input);
+  const result = [Buffer.from(input.subarray(0, 8))];
+  for (const c of chunks) {
+    if (c.type === 'IHDR') result.push(chunk(c.type, c.data), ...before);
+    else if (c.type === 'IEND') result.push(...after, chunk(c.type, c.data));
+    else result.push(chunk(c.type, c.data));
+  }
+  return Buffer.concat(result);
+}

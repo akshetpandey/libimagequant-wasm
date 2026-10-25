@@ -39,6 +39,7 @@ These instructions apply to all coding agents working in this repository.
 ## Architecture
 
 - `src/lib.rs` wraps imagequant and PNG encoding/decoding with wasm-bindgen. It exports `ImageQuantizer`, `QuantizationResult`, and PNG helpers.
+- `src/metadata.rs` selects compatible color/density metadata by default; `metadata: all` also includes bounded text/EXIF. png-rs owns all PNG/APNG encoding. `src/png_input.rs` keeps static PNG decoding, quantization, and metadata encoding in Rust.
 - `src/animation.rs` validates APNG streams, composites offset/blended/disposed frames, uses two decode passes with a frozen shared palette, and writes indexed APNG delta rectangles through png-rs. `src/animation_bindings.rs` exposes owned frame arrays and self-contained WASM declarations.
 - `src/index.ts` provides the browser `LibImageQuant` API and its embedded worker transport.
 - `src/client.ts` shares worker lifecycle, timeouts, and input handling across browser and Node clients. `src/types.ts` contains DOM-free shared contracts.

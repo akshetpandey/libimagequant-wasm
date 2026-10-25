@@ -6,6 +6,8 @@ use wasm_bindgen::prelude::*;
 
 mod animation;
 mod animation_bindings;
+mod metadata;
+mod png_input;
 
 fn checked_integer(value: f64, min: u32, max: u32, name: &str) -> Result<u32, JsValue> {
     if !value.is_finite() || value.fract() != 0.0 || value < min as f64 || value > max as f64 {
@@ -97,6 +99,7 @@ impl ImageQuantizer {
         png_bytes: &Uint8Array,
         dithering: Option<f64>,
         include_frame_data: Option<bool>,
+        metadata: Option<String>,
     ) -> Result<Option<JsValue>, JsValue> {
         let bytes = png_bytes.to_vec();
         let Some(result) = animation::quantize(
@@ -104,6 +107,7 @@ impl ImageQuantizer {
             &self.attr,
             dithering,
             include_frame_data.unwrap_or(false),
+            metadata::Policy::parse(metadata.as_deref()).map_err(|e| JsValue::from_str(&e))?,
         )
         .map_err(|e| JsValue::from_str(&e))?
         else {
@@ -113,6 +117,21 @@ impl ImageQuantizer {
             result,
             include_frame_data.unwrap_or(false),
         )?))
+    }
+
+    /// Quantize a static PNG, preserving selected source metadata.
+    #[wasm_bindgen(js_name = quantizePng, unchecked_return_type = "PngQuantizationResult")]
+    pub fn quantize_png(
+        &self,
+        png_bytes: &Uint8Array,
+        dithering: Option<f64>,
+        metadata: Option<String>,
+    ) -> Result<JsValue, JsValue> {
+        let policy =
+            metadata::Policy::parse(metadata.as_deref()).map_err(|e| JsValue::from_str(&e))?;
+        let result = png_input::quantize(&png_bytes.to_vec(), &self.attr, dithering, policy)
+            .map_err(|e| JsValue::from_str(&e))?;
+        animation_bindings::static_into_js(result)
     }
 
     #[wasm_bindgen(js_name = quantizeImage)]

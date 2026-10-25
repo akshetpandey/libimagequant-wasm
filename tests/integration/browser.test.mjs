@@ -17,6 +17,9 @@ import {
   blue,
   clear,
   inspectTransfers,
+  addMetadata,
+  chunk,
+  chunksOf,
 } from './apng-fixtures.mjs';
 
 const browserTypes = { chromium, firefox, webkit };
@@ -174,12 +177,13 @@ test(
   { timeout: 15000 },
   async () => {
     const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
-    for (const [bytes, expected] of [
+    for (const [bytes, expected, includeFrameData = true] of [
       [input, 21],
+      [input, 2, false],
       [makeApng({ poster: [...red, ...red], frames: [{ samples: [...blue, ...green] }] }), 3],
     ]) {
       const report = await page.evaluate(
-        async ({ png, hook }) => {
+        async ({ png, hook, includeFrameData: includePixels }) => {
           const source = `self.postMessage = (${hook})(self.postMessage.bind(self));
         await import(${JSON.stringify(new URL('/dist/worker.mjs', location.href).href)});`;
           const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -193,19 +197,24 @@ test(
                   worker.postMessage({
                     id: 1,
                     action: 'quantize_png',
-                    data: { pngBytes: new Uint8Array(png), options: { includeFrameData: true } },
+                    data: {
+                      pngBytes: new Uint8Array(png),
+                      options: { includeFrameData: includePixels },
+                    },
                   });
                 else if (data.success === false) reject(new Error(data.error));
                 else if (data.result) result = data.result;
                 else if (data.type === 'transfer-inspection')
                   resolve({
                     ...data,
-                    native: result.animation.frames.every(
-                      (frame) => frame.imageData instanceof ImageData,
+                    native: result.animation.frames.every((frame) =>
+                      includePixels ? frame.imageData instanceof ImageData : !frame.imageData,
                     ),
                     received:
                       result.pngBytes.byteLength > 0 &&
-                      result.animation.frames.every((frame) => frame.imageData.data.byteLength > 0),
+                      result.animation.frames.every((frame) =>
+                        includePixels ? frame.imageData.data.byteLength > 0 : !frame.imageData,
+                      ),
                   });
               };
             });
@@ -214,7 +223,7 @@ test(
             URL.revokeObjectURL(url);
           }
         },
-        { png: [...bytes], hook: inspectTransfers.toString() },
+        { png: [...bytes], hook: inspectTransfers.toString(), includeFrameData },
       );
       assert.deepEqual(report, {
         type: 'transfer-inspection',
@@ -228,88 +237,96 @@ test(
   },
 );
 
-test('the real beach-ball APNG agrees with native source and output decoding', async () => {
-  const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
-  const checked = await page.evaluate(
-    async (bytes) => {
-      const { default: Quantizer } = await import('/dist/index.mjs');
-      const raw = await import('/dist/wasm/libimagequant_wasm.js');
-      await raw.default();
-      const source = new Uint8Array(bytes);
-      const decoded = raw.decode_png_animation(source);
-      const q = new Quantizer();
-      try {
-        const result = await q.quantizePng(source, {
-          maxColors: 64,
-          dithering: 0,
-          includeFrameData: true,
-        });
-        const counts = [decoded.animation.frames.length, result.animation.frames.length];
-        const nativeErrors = [];
-        const durations = [];
-        if (globalThis.ImageDecoder) {
-          for (const [png, expected] of [
-            [source, decoded.animation.frames],
-            [result.pngBytes, result.animation.frames],
-          ]) {
-            const decoder = new ImageDecoder({
-              data: png,
-              type: 'image/png',
-              preferAnimation: true,
-            });
-            let worst = 0;
-            try {
-              await decoder.completed;
-              await decoder.tracks.ready;
-              counts.push(decoder.tracks.selectedTrack.frameCount);
-              for (let i = 0; i < decoder.tracks.selectedTrack.frameCount; i++) {
-                const { image } = await decoder.decode({ frameIndex: i });
-                try {
-                  durations.push(image.duration);
-                  const pixels = new Uint8Array(100 * 100 * 4);
-                  await image.copyTo(pixels, { format: 'RGBA' });
-                  const wanted = expected[i].imageData.data;
-                  for (let p = 0; p < pixels.length; p++) {
-                    const alpha = p - (p % 4) + 3;
-                    const a =
-                      p % 4 === 3 ? pixels[p] : Math.round((pixels[p] * pixels[alpha]) / 255);
-                    const b =
-                      p % 4 === 3 ? wanted[p] : Math.round((wanted[p] * wanted[alpha]) / 255);
-                    worst = Math.max(worst, Math.abs(a - b));
+for (const file of ['beach-ball.apng', 'beach-ball-45.apng']) {
+  test(`real ${file} agrees with native source and output decoding`, async () => {
+    const input = await readFile(new URL(`../fixtures/${file}`, import.meta.url));
+    const expectedDelays = chunksOf(input)
+      .filter((c) => c.type === 'fcTL')
+      .map((c) => (c.data.readUInt16BE(20) * 1000) / (c.data.readUInt16BE(22) || 100));
+    const checked = await page.evaluate(
+      async (bytes) => {
+        const { default: Quantizer } = await import('/dist/index.mjs');
+        const raw = await import('/dist/wasm/libimagequant_wasm.js');
+        await raw.default();
+        const source = new Uint8Array(bytes);
+        const decoded = raw.decode_png_animation(source);
+        const q = new Quantizer();
+        try {
+          const result = await q.quantizePng(source, {
+            maxColors: 64,
+            dithering: 0,
+            includeFrameData: true,
+          });
+          const counts = [decoded.animation.frames.length, result.animation.frames.length];
+          const nativeErrors = [];
+          const durations = [];
+          if (globalThis.ImageDecoder) {
+            for (const [png, expected] of [
+              [source, decoded.animation.frames],
+              [result.pngBytes, result.animation.frames],
+            ]) {
+              const decoder = new ImageDecoder({
+                data: png,
+                type: 'image/png',
+                preferAnimation: true,
+              });
+              let worst = 0;
+              try {
+                await decoder.completed;
+                await decoder.tracks.ready;
+                counts.push(decoder.tracks.selectedTrack.frameCount);
+                for (let i = 0; i < decoder.tracks.selectedTrack.frameCount; i++) {
+                  const { image } = await decoder.decode({ frameIndex: i });
+                  try {
+                    durations.push(image.duration);
+                    const pixels = new Uint8Array(decoded.width * decoded.height * 4);
+                    await image.copyTo(pixels, { format: 'RGBA' });
+                    const wanted = expected[i].imageData.data;
+                    for (let p = 0; p < pixels.length; p++) {
+                      const alpha = p - (p % 4) + 3;
+                      const a =
+                        p % 4 === 3 ? pixels[p] : Math.round((pixels[p] * pixels[alpha]) / 255);
+                      const b =
+                        p % 4 === 3 ? wanted[p] : Math.round((wanted[p] * wanted[alpha]) / 255);
+                      worst = Math.max(worst, Math.abs(a - b));
+                    }
+                  } finally {
+                    image.close();
                   }
-                } finally {
-                  image.close();
                 }
+              } finally {
+                decoder.close();
               }
-            } finally {
-              decoder.close();
+              nativeErrors.push(worst);
             }
-            nativeErrors.push(worst);
           }
+          return {
+            counts,
+            nativeErrors,
+            durations,
+            nativeImages: result.animation.frames.every((f) => f.imageData instanceof ImageData),
+            plays: result.animation.numPlays,
+            delays: result.animation.frames.map((f) => f.durationMs),
+          };
+        } finally {
+          q.dispose();
         }
-        return {
-          counts,
-          nativeErrors,
-          durations,
-          nativeImages: result.animation.frames.every((f) => f.imageData instanceof ImageData),
-          plays: result.animation.numPlays,
-          delays: result.animation.frames.map((f) => f.durationMs),
-        };
-      } finally {
-        q.dispose();
-      }
-    },
-    [...input],
-  );
-  assert.equal(checked.nativeImages, true);
-  assert.equal(checked.plays, 0);
-  assert.deepEqual(checked.delays, Array(20).fill(75));
-  assert(checked.counts.every((n) => n === 20));
-  if (browserName === 'chromium') {
-    assert.deepEqual(checked.nativeErrors, [0, 0]);
-    assert.deepEqual(checked.durations, Array(40).fill(75000));
-  }
-});
+      },
+      [...input],
+    );
+    assert.equal(checked.nativeImages, true);
+    assert.equal(checked.plays, 0);
+    assert.deepEqual(checked.delays, expectedDelays);
+    assert(checked.counts.every((n) => n === 20));
+    if (browserName === 'chromium') {
+      assert.deepEqual(checked.nativeErrors, [0, 0]);
+      assert.deepEqual(
+        checked.durations,
+        [...expectedDelays, ...expectedDelays].map((n) => n * 1000),
+      );
+    }
+  });
+}
 
 test('browser APNG results retain a separate native fallback and independent frames', async () => {
   const images = await page.evaluate(
@@ -509,4 +526,41 @@ test('the exported browser worker survives malformed requests', async () => {
     }),
     { errors: Array(4).fill('Invalid quantization request'), palette: [[255, 0, 0, 255]] },
   );
+});
+
+test('browser PNG and APNG workers apply metadata policy with compact frame results', async () => {
+  const real = await readFile(new URL('../fixtures/beach-ball-45.apng', import.meta.url));
+  const density = Buffer.from([0, 0, 11, 19, 0, 0, 11, 19, 1]);
+  const input = addMetadata(
+    real,
+    [chunk('pHYs', density)],
+    [chunk('tEXt', Buffer.from('Author\0Example'))],
+  );
+  const outputs = await page.evaluate(
+    async (bytes) => {
+      const { default: Quantizer } = await import('/dist/index.mjs');
+      const q = new Quantizer();
+      try {
+        const results = [];
+        for (const metadata of ['safe', 'all', 'none']) {
+          const result = await q.quantizePng(new Uint8Array(bytes), { metadata });
+          results.push({
+            png: [...result.pngBytes],
+            omitted: result.animation.frames.every((f) => !f.imageData),
+            preview: result.imageData instanceof ImageData,
+          });
+        }
+        return results;
+      } finally {
+        q.dispose();
+      }
+    },
+    [...input],
+  );
+  for (const [i, output] of outputs.entries()) {
+    assert(output.omitted && output.preview);
+    const types = chunksOf(output.png).map((c) => c.type);
+    assert.equal(types.includes('pHYs'), i !== 2);
+    assert.equal(types.includes('tEXt'), i === 1);
+  }
 });

@@ -192,8 +192,17 @@ Both entry points expose the same methods:
 
 Each call snapshots byte inputs and options; your buffers are never detached.
 Blob reading is covered by the operation timeout and disposal. Each result owns its output arrays.
-PNG and APNG input is normalized to RGBA8. Source metadata other than APNG
-animation controls is not preserved.
+PNG and APNG input is normalized to RGBA8. The `metadata` option applies to PNG input:
+
+- `'safe'` (default): retain gAMA, cHRM, sRGB, compatible RGB ICC profiles, and pHYs pixel density/aspect ratio.
+- `'all'`: also retain supported tEXt, zTXt, iTXt, and EXIF, including text after image data. EXIF can contain location data, orientation, and an original thumbnail; choose this policy when those remain appropriate.
+- `'none'`: strip ancillary metadata, while retaining APNG playback controls.
+
+Preserved profile/text/EXIF payloads are limited to 1 MiB in total, with bounded text decompression.
+PLTE/tRNS are rebuilt; palette-dependent bKGD, hIST, sBIT, unknown chunks, and unsupported HDR metadata are dropped.
+Grayscale ICC profiles cannot describe indexed RGB output and are omitted. Quantization uses source gamma
+without performing an ICC color-space conversion. Returned RGBA pixels remain in source sample coordinates;
+use the encoded PNG for color-managed display of tagged images. Stripping color metadata can change their appearance.
 
 Images are limited to 16,777,216 pixels (64 MiB of RGBA data). Resize larger images
 before processing; actual working memory exceeds the raw image size.
@@ -229,6 +238,7 @@ After a worker crash, dispose of the instance and create another.
 | `quality`          | `{ min, target }`, integers `0–100`, `min <= target` | Minimum acceptable and target quality                        |
 | `dithering`        | `0–1`                                                | Dithering strength                                           |
 | `posterization`    | Integer `0–4`                                        | Number of low color bits discarded                           |
+| `metadata`         | `'safe'` (default), `'all'`, or `'none'`             | Metadata policy for PNG/APNG input                           |
 | `includeFrameData` | Boolean, default `false`                             | Return full APNG frame pixels in addition to timing metadata |
 
 Reuse an instance for multiple images to avoid worker and WASM startup costs;
@@ -266,8 +276,10 @@ API manages those allocations for you.
 
 `decode_png_to_rgba` reads the static/default image. For all unquantized APNG
 frames, use `decode_png_animation(bytes)`. For shared-palette APNG output, use
-`ImageQuantizer.quantizePngAnimation(bytes, dithering?)` after configuring the
-quantizer. Both animation methods return `undefined` for static PNG input.
+`ImageQuantizer.quantizePngAnimation(bytes, dithering?, includeFrameData?, metadata?)` after configuring the
+quantizer. The quantization method omits frame pixels by default; `decode_png_animation`
+explicitly returns every decoded frame. Both animation methods return `undefined` for static PNG input.
+`ImageQuantizer.quantizePng(bytes, dithering?, metadata?)` handles static PNG input.
 
 ## Browser support and deployment
 
