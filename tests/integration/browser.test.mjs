@@ -1,16 +1,30 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, mkdir, symlink, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'vite';
 import { chromium } from 'playwright';
 
-let server, browser, page;
+let server, browser, page, consumer;
+const bundles = new Map();
 before(async () => {
+  consumer = await mkdtemp(join(tmpdir(), 'libimagequant-browser-'));
+  await mkdir(join(consumer, 'node_modules'));
+  await symlink(fileURLToPath(new URL('../../', import.meta.url)), join(consumer, 'node_modules/libimagequant-wasm'));
+  await writeFile(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
   server = createServer(async (req, res) => {
     const path = new URL(req.url, 'http://localhost').pathname;
     if (path === '/') {
       res.setHeader('Content-Type', 'text/html');
       res.end('<!doctype html><title>Package consumer</title>');
+      return;
+    }
+    if (bundles.has(path)) {
+      res.setHeader('Content-Type', 'text/javascript');
+      res.end(bundles.get(path));
       return;
     }
     const file = path === '/relocated/worker.mjs' ? 'worker.mjs'
@@ -30,6 +44,7 @@ before(async () => {
 after(async () => {
   await browser?.close();
   if (server) await new Promise(resolve => server.close(resolve));
+  if (consumer) await rm(consumer, { recursive: true, force: true });
 });
 
 async function quantize(options) {
@@ -41,6 +56,36 @@ async function quantize(options) {
       return { palette: result.palette, width: result.width, height: result.height };
     } finally { q.dispose(); }
   }, options);
+}
+
+test('the default constructor works without copying worker or WASM assets', async () => {
+  assert.deepEqual(await quantize({}), { palette: [[255, 0, 0, 255]], width: 1, height: 1 });
+});
+
+test('the embedded worker accepts a custom WASM directory', async () => {
+  assert.equal((await quantize({ wasmUrl: '/assets/' })).width, 1);
+});
+
+for (const format of ['esm', 'cjs']) {
+  test(`a production ${format} consumer can use the default constructor`, async () => {
+    const entry = join(consumer, format === 'esm' ? 'app.mjs' : 'app.cjs');
+    const declaration = format === 'esm' ? "import Quantizer from 'libimagequant-wasm';"
+      : "const Quantizer = require('libimagequant-wasm');";
+    const body = `async function run() {
+      const q = new Quantizer();
+      try { return (await q.quantizeImageData(new ImageData(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1))).palette; }
+      finally { q.dispose(); }
+    }`;
+    await writeFile(entry, `${declaration}\n${body}\n${format === 'esm' ? 'export { run };' : 'exports.run = run;'}`);
+    const built = await build({ configFile: false, root: consumer, logLevel: 'silent',
+      build: { write: false, lib: { entry, formats: ['es'] } } });
+    const output = Array.isArray(built) ? built[0].output : built.output;
+    bundles.set(`/consumer-${format}.mjs`, output.find(item => item.type === 'chunk').code);
+    assert.deepEqual(await page.evaluate(async format => {
+      const module = await import(`/consumer-${format}.mjs`);
+      return await (module.run ?? module.default.run)();
+    }, format), [[255, 0, 0, 255]]);
+  });
 }
 
 test('loads a custom WASM directory independently of the worker location', async () => {

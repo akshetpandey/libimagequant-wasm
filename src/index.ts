@@ -5,6 +5,8 @@
  * image quantization library running in a Web Worker with WASM.
  */
 
+import DefaultWorker from './worker?worker&inline';
+
 export interface QuantizationOptions {
   /** Speed vs quality trade-off (1-10, lower = better quality) */
   speed?: number;
@@ -72,7 +74,12 @@ export default class LibImageQuant {
 
   constructor(options: LibImageQuantOptions = {}) {
     this.workerUrl = options.workerUrl;
-    this.wasmUrl = options.wasmUrl;
+    if (options.wasmUrl) {
+      const pageUrl = globalThis.location.href;
+      const workerUrl = new URL(options.workerUrl || pageUrl, pageUrl);
+      const base = ['http:', 'https:'].includes(workerUrl.protocol) ? workerUrl.href : pageUrl;
+      this.wasmUrl = new URL(options.wasmUrl, base).href;
+    }
     this.initTimeout = options.initTimeout || 10000;
     this.operationTimeout = options.operationTimeout || 30000;
     this.initPromise = this.initialize();
@@ -90,13 +97,9 @@ export default class LibImageQuant {
     return new Promise((resolve, reject) => {
       this.rejectInitialization = reject;
       try {
-        let workerUrl;
-        if (this.workerUrl) {
-          workerUrl = this.workerUrl;
-        } else {
-          workerUrl = new URL('./worker', import.meta.url).href;
-        }
-        this.worker = new Worker(workerUrl, { type: "module" });
+        this.worker = this.workerUrl
+          ? new Worker(this.workerUrl, { type: 'module' })
+          : new DefaultWorker();
 
         this.initTimer = setTimeout(() => {
           this.shutdown(new Error("Worker initialization timeout"));

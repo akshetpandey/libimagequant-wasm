@@ -279,6 +279,12 @@ supported. For example, `{ workerUrl: '/workers/worker.mjs', wasmUrl: '/assets/q
 A URL ending in `.wasm` overrides only the binary; the JavaScript loader stays
 next to the worker's default `wasm/` directory.
 
+The default worker embeds its JavaScript and WASM, so ordinary usage requires no
+asset copying. Allow `blob:` workers in your Content Security Policy. Applications
+that require separately hosted workers can supply `workerUrl` and `wasmUrl`.
+Relative WASM paths resolve against an explicit worker URL, or against the page
+URL when using the default embedded worker.
+
 ### Performance Issues
 - Large images may take significant time to quantize
 - Consider resizing images before quantization

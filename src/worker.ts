@@ -2,6 +2,7 @@
 // Import will be done dynamically at runtime
 
 import type { QuantizationOptions } from ".";
+import initializeBundledWasm, * as bundledWasm from 'virtual:libimagequant-wasm';
 
 
 type WorkerMessage = {
@@ -41,6 +42,12 @@ let customWasmUrl: string | undefined = undefined;
 async function initializeWasm(): Promise<boolean> {
   if (isInitialized) return true;
   if (!initialization) initialization = (async () => {
+    if (!customWasmUrl) {
+      await initializeBundledWasm();
+      wasmModule = bundledWasm;
+      isInitialized = true;
+      return true;
+    }
     // Initialize the WASM module
     const binaryOverride = customWasmUrl && /\.wasm(?:[?#]|$)/i.test(customWasmUrl);
     const directory = new URL(customWasmUrl && !binaryOverride

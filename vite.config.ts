@@ -2,9 +2,16 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { copyFile, mkdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir } from 'node:fs/promises'
 
 const execFileAsync = promisify(execFile)
+
+const wasmResolver = () => ({
+  name: 'wasm-module',
+  resolveId(id: string) {
+    if (id === 'virtual:libimagequant-wasm') return resolve(import.meta.dirname, 'pkg/libimagequant_wasm.js')
+  }
+})
 
 // Plugin to build WASM
 const wasmPlugin = () => {
@@ -18,7 +25,7 @@ const wasmPlugin = () => {
       hasBuiltWasm = true;
       console.log('Building WASM module...')
       try {
-        // Build WASM to temporary directory first
+        // Generate bindings before either bundle or the embedded worker resolves them.
         const { stderr } = await execFileAsync('wasm-pack', ['build', '--target', 'web', '--out-dir', 'pkg', '--', '--locked'])
         if (stderr) console.warn('WASM build warnings:', stderr)
         console.log('WASM build completed')
@@ -48,9 +55,6 @@ const wasmPlugin = () => {
           await copyFile(`pkg/${file}`, `dist/wasm/${file}`)
         }
 
-        // Clean up temporary directory
-        await rm('pkg', { recursive: true, force: true })
-
         console.log('WASM files copied to dist/wasm')
       } catch (error) {
         console.error('WASM copy failed:', error)
@@ -61,8 +65,10 @@ const wasmPlugin = () => {
 }
 
 export default defineConfig({
-  plugins: [wasmPlugin()],
+  plugins: [wasmPlugin(), wasmResolver()],
+  worker: { format: 'es', plugins: () => [wasmResolver()] },
   build: {
+    assetsInlineLimit: Infinity,
     lib: {
       entry: {
         index: resolve(import.meta.dirname, 'src/index.ts'),
