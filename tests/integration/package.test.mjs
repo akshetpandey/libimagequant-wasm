@@ -93,6 +93,26 @@ for (const format of ['mts', 'cts']) {
   });
 }
 
+for (const format of ['es', 'cjs']) {
+  test(`a bundled Node ${format} consumer can locate the exported worker`, async () => {
+    const entry = join(directory, `node-${format}.mjs`);
+    await writeFile(entry, `import Quantizer from 'libimagequant-wasm/node';
+      export async function run(workerUrl) {
+        const q = new Quantizer({ workerUrl });
+        try { return (await q.quantizeImageData({ data:new Uint8ClampedArray([255,0,0,255]), width:1, height:1 })).width; }
+        finally { q.dispose(); }
+      }`);
+    const outDir = join(directory, `bundled-${format}`);
+    await build({ configFile: false, root: directory, logLevel: 'silent', build: {
+      outDir, target: 'node24', lib: { entry, formats: [format], fileName: () => `app.${format === 'es' ? 'mjs' : 'cjs'}` },
+      rolldownOptions: { platform: 'node', external: [/^node:/] },
+    } });
+    const { pathToFileURL } = await import('node:url');
+    const { run } = await import(pathToFileURL(join(outDir, `app.${format === 'es' ? 'mjs' : 'cjs'}`)));
+    assert.equal(await run(new URL(import.meta.resolve('libimagequant-wasm/node-worker'))), 1);
+  });
+}
+
 test('the packed package runs from a strict npm consumer installation', async () => {
   const repository = fileURLToPath(new URL('../../', import.meta.url));
   const { version } = JSON.parse(await readFile(join(repository, 'package.json'), 'utf8'));

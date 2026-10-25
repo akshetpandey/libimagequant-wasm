@@ -78,3 +78,16 @@ test('Node works from eval input and exits after disposal', async () => {
   `], { cwd: fileURLToPath(new URL('../../', import.meta.url)), timeout: 5000 });
   assert.equal(stdout.trim(), '1');
 });
+
+test('Node rejects startup failures and unexpected worker exits promptly', async () => {
+  for (const source of [
+    "throw new Error('startup exploded')",
+    "import { parentPort } from 'node:worker_threads'; parentPort.postMessage({ type:'ready' }); parentPort.once('message', () => process.exit(0));",
+  ]) {
+    const q = new Quantizer({ workerUrl: new URL(`data:text/javascript,${encodeURIComponent(source)}`), operationTimeout: 5000 });
+    try {
+      await assert.rejects(q.quantizeImageData(image()), /Worker error: (startup exploded|Quantization worker exited \(0\))/);
+      await assert.rejects(q.quantizeImageData(image()), /Worker error:/);
+    } finally { q.dispose(); }
+  }
+});

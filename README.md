@@ -118,6 +118,13 @@ worker and WASM assets are resolved from the installed package. Its prebuilt
 worker does not inherit application-specific CLI loaders or flags. Dispose of
 each instance when finished, and reuse it for multiple requests.
 
+For server bundles, keep `libimagequant-wasm` external so its worker remains next
+to the installed Node entry. If you bundle or relocate the library, copy the file
+exported as `libimagequant-wasm/node-worker` and set `workerUrl` to its absolute
+`file:` URL. For example, an unbundled application can obtain that URL with
+`new URL(import.meta.resolve('libimagequant-wasm/node-worker'))`; CommonJS can use
+`pathToFileURL(require.resolve('libimagequant-wasm/node-worker'))` from `node:url`.
+
 ### LibImageQuant
 
 #### Constructor
