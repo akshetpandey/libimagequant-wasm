@@ -4,7 +4,7 @@ use png::{
     BitDepth, BlendOp, ColorType, DecodeOptions, Decoder, DisposeOp, Encoder, FrameControl,
     Transformations,
 };
-use std::io::Cursor;
+use std::{borrow::Cow, io::Cursor};
 
 const MAX_ANIMATION_FRAMES: u32 = 1000;
 const MAX_ANIMATION_PIXELS: usize = 67_108_864;
@@ -109,13 +109,13 @@ fn over(target: &mut RGBA, source: RGBA) {
     );
 }
 
-fn frame_pixels(
-    buf: &[u8],
+fn frame_pixels<'a>(
+    buf: &'a [u8],
     info: &png::OutputInfo,
     interlaced: bool,
     canvas_width: u32,
     canvas_height: u32,
-) -> Result<Vec<RGBA>, String> {
+) -> Result<Cow<'a, [RGBA]>, String> {
     if info.bit_depth != BitDepth::Eight {
         return Err("PNG was not normalized to eight-bit channels".into());
     }
@@ -132,6 +132,14 @@ fn frame_pixels(
     } else {
         info.line_size
     };
+    if info.color_type == ColorType::Rgba && stride == info.line_size {
+        let bytes = buf
+            .get(..info.buffer_size())
+            .ok_or("Invalid APNG frame buffer size")?;
+        // RGBA8 is a byte-aligned Pod. Borrow packed normalized pixels rather
+        // than retaining another full canvas alongside the decoder's buffer.
+        return Ok(Cow::Borrowed(bytemuck::cast_slice(bytes)));
+    }
     let mut pixels = Vec::with_capacity(info.width as usize * info.height as usize);
     for y in 0..info.height as usize {
         let row = buf
@@ -160,7 +168,7 @@ fn frame_pixels(
             _ => return Err("Unsupported PNG color type".into()),
         }
     }
-    Ok(pixels)
+    Ok(Cow::Owned(pixels))
 }
 
 fn composite(
@@ -232,7 +240,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
             .map_err(|e| format!("Failed to read APNG frame: {e}"))?;
         let pixels = frame_pixels(&buffer, &info, interlaced, width, height)?;
         if separate_poster && index == 0 {
-            poster = Some(pixels);
+            poster = Some(pixels.into_owned());
             continue;
         }
         let fc = reader

@@ -256,6 +256,40 @@ test('one-pixel previous disposal does not allocate another full WASM canvas', a
   assert(peaks[1] <= peaks[0] + 65536, `PREVIOUS added ${peaks[1] - peaks[0]} bytes for one pixel`);
 });
 
+test('packed RGBA APNG decoding avoids a duplicate normalized frame allocation', async () => {
+  const url = new URL('../../dist/wasm/libimagequant_wasm.js', import.meta.url);
+  url.searchParams.set('rgba-memory', 'fresh');
+  const raw = await import(url.href);
+  const { memory } = raw.initSync({
+    module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)),
+  });
+  const retained = raw.decode_png_animation(makeApng({ width: 1, frames: [{ samples: blue }] }));
+  const firstBuffer = retained.imageData.data.buffer;
+  const result = raw.decode_png_animation(
+    makeApng({
+      width: 1024,
+      height: 1024,
+      frames: [
+        {
+          samples: Array(1024 * 1024)
+            .fill(red)
+            .flat(),
+        },
+      ],
+    }),
+  );
+  assert.equal(result.animation.frames.length, 1);
+  assert.deepEqual([...result.imageData.data.subarray(-4)], red);
+  assert.notEqual(firstBuffer, memory.buffer);
+  assert.deepEqual(
+    [...retained.imageData.data],
+    blue,
+    'WASM memory growth changed an earlier result',
+  );
+  // One decoder buffer, one composition canvas, one saved result, plus allocator overhead.
+  assert(memory.buffer.byteLength <= 14 * 1024 * 1024, `${memory.buffer.byteLength} bytes used`);
+});
+
 for (const fixture of [
   {
     name: 'one-bit indexed alpha',

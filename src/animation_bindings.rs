@@ -37,9 +37,11 @@ fn object(fields: &[(&str, JsValue)]) -> Result<JsValue, JsValue> {
 }
 
 fn image(pixels: &[RGBA], width: u32, height: u32) -> Result<JsValue, JsValue> {
-    let bytes: Vec<u8> = pixels.iter().flat_map(|c| [c.r, c.g, c.b, c.a]).collect();
+    // The typed-array constructor copies into an owned JS buffer. A safe byte
+    // view avoids allocating another temporary RGBA vector in WASM first.
+    let bytes: &[u8] = bytemuck::cast_slice(pixels);
     object(&[
-        ("data", Uint8ClampedArray::from(bytes.as_slice()).into()),
+        ("data", Uint8ClampedArray::from(bytes).into()),
         ("width", width.into()),
         ("height", height.into()),
     ])

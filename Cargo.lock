@@ -127,6 +127,7 @@ dependencies = [
 name = "libimagequant-wasm"
 version = "0.4.0"
 dependencies = [
+ "bytemuck",
  "console_error_panic_hook",
  "imagequant",
  "js-sys",
