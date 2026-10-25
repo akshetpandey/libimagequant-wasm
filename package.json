@@ -1,7 +1,7 @@
 {
   "name": "libimagequant-wasm",
   "version": "0.3.0",
-  "description": "WASM bindings for libimagequant image quantization library with Web Worker support",
+  "description": "Image quantization for browsers and Node.js with WebAssembly and worker support",
   "type": "module",
   "packageManager": "pnpm@12.15.0",
   "main": "./dist/index.cjs",
@@ -28,7 +28,10 @@
       "types": "./dist/wasm/libimagequant_wasm.d.ts",
       "default": "./dist/wasm/libimagequant_wasm.js"
     },
-    "./wasm/libimagequant_wasm_bg.wasm": "./dist/wasm/libimagequant_wasm_bg.wasm"
+    "./wasm/libimagequant_wasm_bg.wasm": {
+      "types": "./dist/wasm/libimagequant_wasm_bg.wasm.d.ts",
+      "default": "./dist/wasm/libimagequant_wasm_bg.wasm"
+    }
   },
   "sideEffects": ["./dist/worker.mjs", "./dist/worker.cjs"],
   "files": [
@@ -63,7 +66,9 @@
     "optimization",
     "compression",
     "color-reduction",
-    "web-worker"
+    "web-worker",
+    "nodejs",
+    "worker-threads"
   ],
   "author": "Akshet Pandey <argetlam.akshet@gmail.com>",
   "license": "MIT",

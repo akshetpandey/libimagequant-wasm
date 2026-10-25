@@ -64,6 +64,32 @@ test('browser results can be saved directly as a Blob with strict TypeScript', a
     console.log(blob, image);`);
 });
 
+test('raw WASM declarations retain native browser WebAssembly types', async () => {
+  await typecheck(`import init, { initSync } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
+    import type * as Binary from 'libimagequant-wasm/wasm/libimagequant_wasm_bg.wasm';
+    const bytes = new Uint8Array();
+    const module = new WebAssembly.Module(bytes);
+    const sync = initSync({ module });
+    const async = await init({ module_or_path: bytes });
+    const memory: WebAssembly.Memory = sync.memory;
+    const rawMemory: typeof Binary.memory = memory;
+    const table: WebAssembly.Table = async.__wbindgen_externrefs;
+    console.log(rawMemory, table);`);
+});
+
+test('raw WASM declarations work in Node without DOM libraries', async () => {
+  await typecheck(`import init, { initSync, ImageQuantizer } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
+    import type * as Binary from 'libimagequant-wasm/wasm/libimagequant_wasm_bg.wasm';
+    const bytes = Buffer.from([]);
+    const sync = initSync({ module: bytes });
+    const async = await init({ module_or_path: bytes });
+    const memory: ArrayBuffer = sync.memory.buffer;
+    const rawMemory: typeof Binary.memory = sync.memory;
+    const item: unknown = async.__wbindgen_externrefs.get(0);
+    const q = new ImageQuantizer();
+    q.free(); console.log(memory, rawMemory, item);`, 'mts', true);
+});
+
 test('CommonJS declarations expose the constructor and named option types', async () => {
   await typecheck(`import Quantizer = require('libimagequant-wasm');
     import type { QuantizationOptions, QuantizationResult, LibImageQuantOptions } from 'libimagequant-wasm';

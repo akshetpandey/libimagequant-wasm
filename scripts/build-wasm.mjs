@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -19,6 +19,11 @@ export async function buildWasm() {
     'build', '--release', '--target', 'web', '--out-dir', 'pkg', '--', '--locked',
   ], { cwd: root, maxBuffer: 16 * 1024 * 1024 });
   if (stderr) process.stderr.write(stderr);
+  const compatibility = await readFile(resolve(root, 'src/wasm-env.d.ts'), 'utf8');
+  for (const file of wasmFiles.filter(file => file.endsWith('.d.ts'))) {
+    const declarations = resolve(root, 'pkg', file);
+    await writeFile(declarations, `${compatibility}\n${await readFile(declarations, 'utf8')}`);
+  }
 }
 
 export async function copyWasm(destination) {
