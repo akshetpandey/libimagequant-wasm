@@ -12,6 +12,8 @@ export interface QuantizationOptions {
   dithering?: number;
   /** Posterization level (0-4) */
   posterization?: number;
+  /** Include full composited APNG frame pixels (default: false). */
+  includeFrameData?: boolean;
 }
 
 /** Raw RGBA input, including Node Buffers and shared-memory byte views. */
@@ -29,7 +31,7 @@ export interface RgbaImageData {
 
 /** A complete composited animation frame, with its original APNG delay fraction. */
 export interface AnimationFrame<T extends RgbaImageData = RgbaImageData> {
-  imageData: T;
+  imageData?: T;
   delayNumerator: number;
   /** A zero denominator means 100, as specified by APNG. */
   delayDenominator: number;

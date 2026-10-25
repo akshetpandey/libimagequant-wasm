@@ -20,7 +20,20 @@ export interface DecodedPngAnimation {
         }>;
     };
 }
-export interface PngAnimationQuantizationResult extends DecodedPngAnimation {
+export interface PngAnimationQuantizationResult {
+    imageData: { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number };
+    width: number;
+    height: number;
+    animation: {
+        numPlays: number;
+        defaultImageIsFrame: boolean;
+        frames: Array<{
+            imageData?: { data: Uint8ClampedArray<ArrayBuffer>; width: number; height: number };
+            delayNumerator: number;
+            delayDenominator: number;
+            durationMs: number;
+        }>;
+    };
     palette: number[][];
     pngBytes: Uint8Array<ArrayBuffer>;
     quality: number;
@@ -47,14 +60,13 @@ fn image(pixels: &[RGBA], width: u32, height: u32) -> Result<JsValue, JsValue> {
     ])
 }
 
-pub(crate) fn decoded_into_js(animation: &Animation) -> Result<JsValue, JsValue> {
+pub(crate) fn decoded_into_js(
+    animation: &Animation,
+    include_frame_data: bool,
+) -> Result<JsValue, JsValue> {
     let frames = Array::new();
     for frame in &animation.frames {
-        frames.push(&object(&[
-            (
-                "imageData",
-                image(&frame.pixels, animation.width, animation.height)?,
-            ),
+        let value = object(&[
             ("delayNumerator", frame.delay_num.into()),
             ("delayDenominator", frame.delay_den.into()),
             (
@@ -67,12 +79,26 @@ pub(crate) fn decoded_into_js(animation: &Animation) -> Result<JsValue, JsValue>
                     }))
                 .into(),
             ),
-        ])?);
+        ])?;
+        if include_frame_data {
+            Reflect::set(
+                &value,
+                &"imageData".into(),
+                &image(&frame.pixels, animation.width, animation.height)?,
+            )?;
+        }
+        frames.push(&value);
     }
     let preview = if let Some(poster) = &animation.poster {
         image(poster, animation.width, animation.height)?
-    } else {
+    } else if include_frame_data {
         Reflect::get(&frames.get(0), &"imageData".into())?
+    } else {
+        image(
+            &animation.frames[0].pixels,
+            animation.width,
+            animation.height,
+        )?
     };
     object(&[
         ("imageData", preview),
@@ -89,8 +115,11 @@ pub(crate) fn decoded_into_js(animation: &Animation) -> Result<JsValue, JsValue>
     ])
 }
 
-pub(crate) fn into_js(result: QuantizedAnimation) -> Result<JsValue, JsValue> {
-    let object = decoded_into_js(&result.animation)?;
+pub(crate) fn into_js(
+    result: QuantizedAnimation,
+    include_frame_data: bool,
+) -> Result<JsValue, JsValue> {
+    let object = decoded_into_js(&result.animation, include_frame_data)?;
     let palette = Array::new();
     for color in &result.palette {
         let rgba = Array::new();

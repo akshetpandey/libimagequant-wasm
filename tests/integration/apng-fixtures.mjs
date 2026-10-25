@@ -233,7 +233,9 @@ export function inspectTransfers(send) {
           ...new Set([
             result.pngBytes.buffer,
             result.imageData.data.buffer,
-            ...result.animation.frames.map((frame) => frame.imageData.data.buffer),
+            ...result.animation.frames.flatMap((frame) =>
+              frame.imageData ? [frame.imageData.data.buffer] : [],
+            ),
           ]),
         ]
       : [];

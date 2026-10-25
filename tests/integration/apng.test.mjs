@@ -4,7 +4,12 @@ import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { on } from 'node:events';
 import { Worker } from 'node:worker_threads';
-import Quantizer from 'libimagequant-wasm/node';
+import NodeQuantizer from 'libimagequant-wasm/node';
+class Quantizer extends NodeQuantizer {
+  quantizePng(input, options = {}) {
+    return super.quantizePng(input, { includeFrameData: true, ...options });
+  }
+}
 import * as wasm from '../../dist/wasm/libimagequant_wasm.js';
 import {
   chunk,
@@ -23,7 +28,12 @@ import {
 wasm.initSync({
   module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)),
 });
-const common = createRequire(import.meta.url)('libimagequant-wasm/node');
+const CommonQuantizer = createRequire(import.meta.url)('libimagequant-wasm/node');
+class common extends CommonQuantizer {
+  quantizePng(input, options = {}) {
+    return super.quantizePng(input, { includeFrameData: true, ...options });
+  }
+}
 
 test('Node APNG workers transfer every owned buffer exactly once', async () => {
   const script = `
@@ -41,7 +51,11 @@ test('Node APNG workers transfer every owned buffer exactly once', async () => {
     const messages = on(worker, 'message', { signal: AbortSignal.timeout(10000) });
     try {
       assert.deepEqual((await messages.next()).value, [{ type: 'ready' }]);
-      worker.postMessage({ id: 1, action: 'quantize_png', data: { pngBytes: input } });
+      worker.postMessage({
+        id: 1,
+        action: 'quantize_png',
+        data: { pngBytes: input, options: { includeFrameData: true } },
+      });
       const [response] = (await messages.next()).value;
       assert.equal(response.success, true);
       assert(response.result.pngBytes.byteLength > 0);
@@ -57,6 +71,30 @@ test('Node APNG workers transfer every owned buffer exactly once', async () => {
       await messages.return();
       await worker.terminate();
     }
+  }
+});
+
+test('APNG frame pixels are opt-in without changing the encoded image or preview', async (t) => {
+  const input = await readFile(new URL('../fixtures/beach-ball.apng', import.meta.url));
+  for (const Q of [NodeQuantizer, CommonQuantizer]) {
+    const q = new Q();
+    t.after(() => q.dispose());
+    const compact = await q.quantizePng(input, { dithering: 0 });
+    const expanded = await q.quantizePng(input, { dithering: 0, includeFrameData: true });
+    assert(compact.animation.frames.every((f) => !Object.hasOwn(f, 'imageData')));
+    assert.equal(compact.animation.frames.length, 20);
+    assert.deepEqual(compact.pngBytes, expanded.pngBytes);
+    assert.deepEqual(compact.imageData.data, expanded.imageData.data);
+    assert.equal(expanded.imageData, expanded.animation.frames[0].imageData);
+    for (const value of ['yes', 1, null])
+      await assert.rejects(q.quantizePng(input, { includeFrameData: value }), /includeFrameData/);
+  }
+  const raw = new wasm.ImageQuantizer();
+  try {
+    const result = raw.quantizePngAnimation(input, 0);
+    assert(result.animation.frames.every((f) => !Object.hasOwn(f, 'imageData')));
+  } finally {
+    raw.free();
   }
 });
 
@@ -429,7 +467,7 @@ test('retains one-frame APNG and leaves static PNG results unanimated', async (t
   const raw = new wasm.ImageQuantizer();
   try {
     assert.equal(raw.quantizePngAnimation(png), undefined);
-    const animation = raw.quantizePngAnimation(compositingApng(), 0);
+    const animation = raw.quantizePngAnimation(compositingApng(), 0, true);
     check(animation, compositedPixels);
   } finally {
     raw.free();

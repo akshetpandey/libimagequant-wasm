@@ -96,6 +96,7 @@ impl ImageQuantizer {
         &self,
         png_bytes: &Uint8Array,
         dithering: Option<f64>,
+        include_frame_data: Option<bool>,
     ) -> Result<Option<JsValue>, JsValue> {
         let bytes = png_bytes.to_vec();
         let Some(animation) = animation::decode(&bytes).map_err(|e| JsValue::from_str(&e))? else {
@@ -103,7 +104,10 @@ impl ImageQuantizer {
         };
         let result = animation::quantize(animation, &self.attr, dithering)
             .map_err(|e| JsValue::from_str(&e))?;
-        Ok(Some(animation_bindings::into_js(result)?))
+        Ok(Some(animation_bindings::into_js(
+            result,
+            include_frame_data.unwrap_or(false),
+        )?))
     }
 
     #[wasm_bindgen(js_name = quantizeImage)]
@@ -295,7 +299,7 @@ pub fn decode_png_animation(png_bytes: &Uint8Array) -> Result<Option<JsValue>, J
     let Some(animation) = animation::decode(&bytes).map_err(|e| JsValue::from_str(&e))? else {
         return Ok(None);
     };
-    Ok(Some(animation_bindings::decoded_into_js(&animation)?))
+    Ok(Some(animation_bindings::decoded_into_js(&animation, true)?))
 }
 
 /// Decode the static/default PNG image, including the fallback image in an APNG.

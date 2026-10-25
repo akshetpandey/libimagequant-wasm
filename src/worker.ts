@@ -67,11 +67,13 @@ self.onmessage = async function (e: MessageEvent<WorkerMessage | ConfigureMessag
     }
 
     for (const frame of result.animation?.frames ?? []) {
-      frame.imageData = new ImageData(frame.imageData.data, result.width, result.height);
+      if (frame.imageData)
+        frame.imageData = new ImageData(frame.imageData.data, result.width, result.height);
     }
-    result.imageData = result.animation?.defaultImageIsFrame
-      ? result.animation.frames[0].imageData
-      : new ImageData(result.imageData.data, result.width, result.height);
+    result.imageData =
+      result.animation?.defaultImageIsFrame && result.animation.frames[0].imageData
+        ? result.animation.frames[0].imageData
+        : new ImageData(result.imageData.data, result.width, result.height);
 
     // Send success response
     self.postMessage(

@@ -158,7 +158,7 @@ indexed APNG with one palette shared across all frames, retaining frame delays,
 loop count, and a separate static fallback image when present.
 
 ```typescript
-const result = await quantizer.quantizePng(input, { maxColors: 64 });
+const result = await quantizer.quantizePng(input, { maxColors: 64, includeFrameData: true });
 if (result.animation) {
   console.log(result.animation.numPlays); // 0 means infinite looping
   for (const frame of result.animation.frames) {
@@ -168,8 +168,11 @@ if (result.animation) {
 }
 ```
 
-`imageData` is the static/default preview. It shares the first frame's image data
-when `animation.defaultImageIsFrame` is true; otherwise it is a separate fallback.
+By default, animation frames contain timing metadata only. Set `includeFrameData: true`
+to also return every composited frame's pixels; this needs four bytes per canvas
+pixel per frame. `imageData` always contains one static/default preview. With frame
+pixels enabled, it shares the first frame's image data when `animation.defaultImageIsFrame`
+is true; otherwise it is a separate fallback.
 Frames are composited using the input's blending and disposal rules, then encoded
 as complete canvases rather than preserving source delta rectangles. Each frame
 exposes its original `delayNumerator` and `delayDenominator`; a denominator of zero
@@ -217,13 +220,14 @@ After a worker crash, dispose of the instance and create another.
 
 ### Quantization options
 
-| Option          | Range                                                | Effect                                |
-| --------------- | ---------------------------------------------------- | ------------------------------------- |
-| `maxColors`     | Integer `2–256`                                      | Maximum palette size                  |
-| `speed`         | Integer `1–10`                                       | Higher values trade quality for speed |
-| `quality`       | `{ min, target }`, integers `0–100`, `min <= target` | Minimum acceptable and target quality |
-| `dithering`     | `0–1`                                                | Dithering strength                    |
-| `posterization` | Integer `0–4`                                        | Number of low color bits discarded    |
+| Option             | Range                                                | Effect                                                       |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| `maxColors`        | Integer `2–256`                                      | Maximum palette size                                         |
+| `speed`            | Integer `1–10`                                       | Higher values trade quality for speed                        |
+| `quality`          | `{ min, target }`, integers `0–100`, `min <= target` | Minimum acceptable and target quality                        |
+| `dithering`        | `0–1`                                                | Dithering strength                                           |
+| `posterization`    | Integer `0–4`                                        | Number of low color bits discarded                           |
+| `includeFrameData` | Boolean, default `false`                             | Return full APNG frame pixels in addition to timing metadata |
 
 Reuse an instance for multiple images to avoid worker and WASM startup costs;
 call `dispose()` when finished.

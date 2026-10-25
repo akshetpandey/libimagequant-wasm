@@ -28,7 +28,11 @@ export async function quantizePng(
 
   return withQuantizer(wasmModule, options, (quantizer) => {
     if (hasAnimationControl(pngData)) {
-      const animation = quantizer.quantizePngAnimation(pngData, options.dithering);
+      const animation = quantizer.quantizePngAnimation(
+        pngData,
+        options.dithering,
+        options.includeFrameData,
+      );
       if (!animation) throw new Error('Missing APNG animation control');
       return animation;
     }
@@ -65,6 +69,8 @@ function withQuantizer<T>(
   options: QuantizationOptions,
   run: (quantizer: Quantizer) => T,
 ): T {
+  if (options.includeFrameData !== undefined && typeof options.includeFrameData !== 'boolean')
+    throw new TypeError('includeFrameData must be a boolean');
   const quantizer = new wasm.ImageQuantizer();
   try {
     if (options.speed !== undefined) quantizer.setSpeed(options.speed);
@@ -121,6 +127,7 @@ function quantizeRgbaData(
 /** The first animation frame and still preview may share a buffer. Transfer it once. */
 export function transferResultBuffers(result: QuantizationResult): ArrayBuffer[] {
   const buffers = [result.pngBytes.buffer, result.imageData.data.buffer];
-  for (const frame of result.animation?.frames ?? []) buffers.push(frame.imageData.data.buffer);
+  for (const frame of result.animation?.frames ?? [])
+    if (frame.imageData) buffers.push(frame.imageData.data.buffer);
   return [...new Set(buffers)];
 }

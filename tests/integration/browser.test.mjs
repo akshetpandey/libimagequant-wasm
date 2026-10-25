@@ -103,7 +103,11 @@ test('APNG retains all frames through browser workers and native decoding', asyn
       const { default: Quantizer } = await import('/dist/index.mjs');
       const q = new Quantizer();
       try {
-        const result = await q.quantizePng(new Uint8Array(bytes), { maxColors: 8, dithering: 0 });
+        const result = await q.quantizePng(new Uint8Array(bytes), {
+          maxColors: 8,
+          dithering: 0,
+          includeFrameData: true,
+        });
         const nativeFrames = [];
         const Decoder = globalThis.ImageDecoder;
         if (Decoder) {
@@ -189,7 +193,7 @@ test(
                   worker.postMessage({
                     id: 1,
                     action: 'quantize_png',
-                    data: { pngBytes: new Uint8Array(png) },
+                    data: { pngBytes: new Uint8Array(png), options: { includeFrameData: true } },
                   });
                 else if (data.success === false) reject(new Error(data.error));
                 else if (data.result) result = data.result;
@@ -235,7 +239,11 @@ test('the real beach-ball APNG agrees with native source and output decoding', a
       const decoded = raw.decode_png_animation(source);
       const q = new Quantizer();
       try {
-        const result = await q.quantizePng(source, { maxColors: 64, dithering: 0 });
+        const result = await q.quantizePng(source, {
+          maxColors: 64,
+          dithering: 0,
+          includeFrameData: true,
+        });
         const counts = [decoded.animation.frames.length, result.animation.frames.length];
         const nativeErrors = [];
         const durations = [];
@@ -309,7 +317,11 @@ test('browser APNG results retain a separate native fallback and independent fra
       const { default: Quantizer } = await import('/dist/index.mjs');
       const q = new Quantizer();
       try {
-        const result = await q.quantizePng(new Uint8Array(bytes), { maxColors: 8, dithering: 0 });
+        const result = await q.quantizePng(new Uint8Array(bytes), {
+          maxColors: 8,
+          dithering: 0,
+          includeFrameData: true,
+        });
         const frames = result.animation.frames.map((frame) => frame.imageData);
         return {
           native: [result.imageData, ...frames].every((image) => image instanceof ImageData),

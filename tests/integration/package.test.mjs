@@ -212,7 +212,7 @@ for (const nodeOnly of [false, true]) {
         function inspect(result: QuantizationResult) {
           const animation: QuantizedAnimation | undefined = result.animation;
           const frame: AnimationFrame | undefined = animation?.frames[0];
-          if (frame) {
+          if (frame?.imageData) {
             const image: ${nodeOnly ? 'RgbaImageData' : 'ImageData'} = frame.imageData;
             const bytes: Uint8ClampedArray<ArrayBuffer> = image.data;
             const duration: number = frame.durationMs;
@@ -238,7 +238,7 @@ test('raw APNG declarations retain owned buffers and match the Node result contr
     try {
       const raw: PngAnimationQuantizationResult | undefined = q.quantizePngAnimation(Buffer.from([]), 0);
       const result: QuantizationResult | undefined = raw;
-      if (result?.animation) {
+      if (result?.animation?.frames[0].imageData) {
         const blob: Blob = new Blob([result.animation.frames[0].imageData.data]);
         console.log(blob);
       }
