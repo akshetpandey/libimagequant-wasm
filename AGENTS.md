@@ -33,13 +33,15 @@ These instructions apply to all coding agents working in this repository.
 - `src/lib.rs` wraps imagequant and PNG encoding/decoding with wasm-bindgen. It exports `ImageQuantizer`, `QuantizationResult`, and PNG helpers.
 - `src/index.ts` provides the browser `LibImageQuant` API and its embedded worker transport.
 - `src/client.ts` shares worker lifecycle, timeouts, and input handling across browser and Node clients. `src/types.ts` contains DOM-free shared contracts.
-- `src/node.ts` exposes the explicit `/node` entry point using `worker_threads`; `src/node-worker.ts` returns raw RGBA data without DOM globals.
+- `src/node.ts` exposes the explicit `/node` entry point using `worker_threads`; `src/node-worker.ts` returns raw RGBA data without DOM globals. Node bundles may override the worker with an absolute URL to the `/node-worker` export.
+- Node workers clear `execArgv` but inherit `NODE_OPTIONS` through the environment. Applications can supply `workerEnv` when preloads need a different environment.
 - `src/quantize.ts` shares quantization and PNG conversion. `src/wasm.ts` shares the in-flight WASM loader.
 - `src/worker.ts` loads the WASM module and processes quantization messages outside the main thread.
 - `scripts/build-wasm.mjs` is the shared locked release build for Vite, `build:wasm`, and `build.sh`. wasm-pack runs the sole wasm-opt pass configured in Cargo.toml. Do not add a second optimizer or enable unused WASM proposals.
+- `src/wasm-env.d.ts` provides module-local compatibility types prepended to generated WASM declarations. Keep browser-native WebAssembly types and Node consumers without DOM libraries working; do not introduce global DOM declarations.
 - `vite.config.ts` embeds a self-contained browser worker and builds browser and Node entries separately with their appropriate platform targets. It assembles ESM, CommonJS, source maps, and raw WASM assets in `dist/`.
-- `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser.
-- `examples/` contains manual browser examples and the package structure validator.
+- `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser, plus Node worker lifecycle, production bundles, strict declaration consumers, and installed package artifacts.
+- `examples/` contains manual browser examples, the runnable Node PNG converter (`node examples/node.mjs input.png output.png`), and the package structure validator.
 
 ## Validation and changes
 

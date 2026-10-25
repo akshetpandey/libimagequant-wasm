@@ -1,6 +1,6 @@
 # libimagequant-wasm
 
-A TypeScript/JavaScript WebAssembly wrapper for the [libimagequant](https://github.com/ImageOptim/libimagequant) image quantization library. This package provides high-quality image color quantization in the browser using Web Workers for optimal performance.
+A TypeScript/JavaScript WebAssembly wrapper for the [libimagequant](https://github.com/ImageOptim/libimagequant) image quantization library. This package provides high-quality image color quantization in browsers and Node.js, using workers to keep processing off the main thread.
 
 ## Features
 
@@ -21,11 +21,23 @@ pnpm add libimagequant-wasm
 
 ### Requirements
 
-- Modern browser with WebAssembly and Web Worker support
+- **Browser API:** a modern browser with ES2025, WebAssembly, and module Web Worker support.
+- **Node API:** Node.js 24 or newer, using the explicit `libimagequant-wasm/node` entry point.
+
+Consumers do not need Rust, wasm-pack, or a particular package manager. The
+repository's `devEngines` settings apply to contributors building this package.
 
 ## Quick Start
 
-### Quantize a PNG
+| Environment | Import / require | Result pixels |
+|-------------|------------------|---------------|
+| Browser | `libimagequant-wasm` | Native `ImageData` |
+| Node.js 24+ | `libimagequant-wasm/node` | `{ data: Uint8ClampedArray, width, height }` |
+
+The root entry always selects the browser API. Choose `/node` explicitly in
+server code. Both entries support ESM and CommonJS and expose the same methods.
+
+### Browser: Quantize a PNG
 
 ```typescript
 import LibImageQuant from 'libimagequant-wasm';
@@ -89,8 +101,6 @@ const result = await quantizer.quantizePng(arrayBuffer);
 const result = await quantizer.quantizePng(blob);
 ```
 
-## API Reference
-
 ### Node.js
 
 Node.js 24+ applications can use the separate worker-thread entry point. It runs
@@ -113,11 +123,12 @@ try {
 CommonJS: `const LibImageQuant = require('libimagequant-wasm/node')`.
 `quantizePng` accepts `Buffer`, `Uint8Array`, `ArrayBuffer`, and `Blob` inputs.
 `quantizeImageData` accepts `{ data: Uint8Array | Uint8ClampedArray, width, height }`
-(including a `Buffer` as `data`) for raw
-RGBA input. The Node constructor accepts `initTimeout` and `operationTimeout`;
+(including a `Buffer` as `data`) for raw RGBA input. The Node constructor accepts
+`initTimeout`, `operationTimeout`, an optional `workerUrl`, and `workerEnv`;
 worker and WASM assets are resolved from the installed package. Its prebuilt
-worker does not inherit application-specific CLI loaders or flags. Dispose of
-each instance when finished, and reuse it for multiple requests.
+worker clears CLI `execArgv` flags. It still inherits `NODE_OPTIONS` through its
+environment. Dispose of each instance when finished, and reuse it for multiple
+requests.
 
 For server bundles, keep `libimagequant-wasm` external so its worker remains next
 to the installed Node entry. If you bundle or relocate the library, copy the file
@@ -125,6 +136,14 @@ exported as `libimagequant-wasm/node-worker` and set `workerUrl` to its absolute
 `file:` URL. For example, an unbundled application can obtain that URL with
 `new URL(import.meta.resolve('libimagequant-wasm/node-worker'))`; CommonJS can use
 `pathToFileURL(require.resolve('libimagequant-wasm/node-worker'))` from `node:url`.
+
+Application preloads supplied through `NODE_OPTIONS` must support worker threads.
+For an app-only preload, override the worker environment explicitly with
+`new LibImageQuant({ workerEnv: { ...process.env, NODE_OPTIONS: '' } })`.
+`workerEnv` supplies the full worker environment and defaults to a copy of
+`process.env`; overrides leave the parent environment unchanged.
+
+## API Reference
 
 ### LibImageQuant
 
@@ -136,8 +155,9 @@ const quantizer = new LibImageQuant(options?: LibImageQuantOptions);
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `workerUrl` | `string` | auto-detected | Custom path to the worker module |
-| `wasmUrl` | `string` | auto-detected | Custom path to the WASM module directory |
+| `workerUrl` | Browser: `string`; Node: `URL` | bundled worker | Browser worker path or absolute Node worker URL |
+| `wasmUrl` | `string` | embedded WASM | Browser only: custom WASM directory or binary URL |
+| `workerEnv` | `Record<string, string \| undefined>` | copy of `process.env` | Node only: worker environment override |
 | `initTimeout` | `number` | `10000` | Worker initialization timeout (ms) |
 | `operationTimeout` | `number` | `30000` | Per-operation timeout (ms) |
 
@@ -150,9 +170,10 @@ call `dispose()` to terminate the worker and all queued work.
 
 ##### `quantizePng(pngData, options?)`
 
-Quantizes a PNG image from binary data.
+Quantizes a PNG image from binary data. For APNG, only the first decoded image is
+processed. The output is a new indexed PNG; source metadata is not preserved.
 
-- `pngData`: `Uint8Array | ArrayBuffer | Blob` - PNG file bytes
+- `pngData`: `Uint8Array | ArrayBuffer | Blob` - PNG file bytes (`Buffer` also works in Node)
 - `options`: `QuantizationOptions` (optional)
 - Returns: `Promise<QuantizationResult>`
 
@@ -168,8 +189,8 @@ Quantizes an `ImageData` object (e.g. from canvas) or raw RGBA byte data.
 
 Terminates the worker, rejects any pending operations, and releases resources. Safe to call multiple times.
 
-Inputs are copied before transfer to the worker; the library never detaches your
-buffers. Blob reading also runs in the worker and is covered by operation timeout
+Each call snapshots byte inputs and options before waiting for worker startup;
+the library never detaches your buffers. Blob reading runs in the worker and is covered by operation timeout
 and disposal. Output byte arrays are independently owned by each result.
 
 PNG and raw RGBA images are limited to 16,777,216 pixels (64 MiB of RGBA data).
@@ -197,13 +218,33 @@ larger images before quantization; actual working memory exceeds the RGBA size.
 {
   palette: number[][];     // Color palette as [[r,g,b,a], ...]
   pngBytes: Uint8Array;    // Quantized indexed PNG file bytes
-  imageData: ImageData;    // Quantized RGBA image data (for canvas)
+  imageData: ImageData | RgbaImageData; // Native ImageData in browsers; plain RGBA in Node
   quality: number;         // Achieved quality (0.0-1.0)
   paletteLength: number;   // Number of colors in palette
   width: number;           // Image width in pixels
   height: number;          // Image height in pixels
 }
 ```
+
+### Low-level WASM exports
+
+The `/wasm/libimagequant_wasm.js` and `/wasm/libimagequant_wasm_bg.wasm` exports
+expose the generated wasm-bindgen API for manual initialization. In Node, pass
+the binary bytes explicitly; Node's `fetch` does not load `file:` URLs:
+
+```typescript
+import init, { decode_png_to_rgba } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
+import { readFile } from 'node:fs/promises';
+
+const binary = new URL(import.meta.resolve('libimagequant-wasm/wasm/libimagequant_wasm_bg.wasm'));
+await init({ module_or_path: await readFile(binary) });
+const [rgba, width, height] = decode_png_to_rgba(await readFile('input.png'));
+```
+
+Use the JavaScript glue and WASM from the same build. Low-level `ImageQuantizer`
+and `QuantizationResult` instances own Rust allocations: call their `free()`
+methods in `finally` blocks. The high-level browser and Node clients manage these
+allocations for each operation.
 
 ## Build from Source
 
@@ -264,7 +305,7 @@ use `cargo clean` to clear that cache.
 
 ## Testing
 
-Tests run in a real browser via [Vitest](https://vitest.dev/) with `@vitest/browser` and Playwright. No mocks — the actual WASM module is loaded and executed.
+Browser tests run in a real browser via [Vitest](https://vitest.dev/) with `@vitest/browser` and Playwright. The actual WASM module is loaded and executed. Node integration tests exercise worker threads, ESM/CommonJS packages, strict TypeScript without DOM types, and installed tarball consumers.
 
 ```bash
 # Build first (tests run against built output)
@@ -272,6 +313,9 @@ pnpm build
 
 # Run tests (headless Chromium)
 pnpm test
+
+# Test Node, browser bundles, and installed package consumers
+pnpm test:integration
 
 # Validate package files and check Rust
 pnpm test:package
@@ -281,6 +325,7 @@ cargo test --locked
 
 The test suite covers:
 - **High-level API** - `LibImageQuant` class, all input formats, options, disposal, concurrency, error handling
+- **Node and packaging** - Worker startup/exit, malformed messages, byte ownership, server bundling, and published declarations
 - **Low-level WASM** - `ImageQuantizer`, `QuantizationResult`, PNG encode/decode, memory management
 - **Result validation** - Color accuracy, PNG integrity, transparency roundtrips
 
@@ -296,9 +341,15 @@ separately hosted worker can be configured with `workerUrl`.
 1. **Reuse quantizer instances** when processing multiple images
 2. **Use appropriate speed settings** - higher speed for real-time, lower for final output
 3. **Consider image size** - quantization time scales with pixel count
-4. **Call `dispose()`** when done to release the Web Worker
+4. **Call `dispose()`** when done to release the browser worker or Node thread
 
 ## Examples
+
+After `pnpm build`, process a PNG in Node with:
+
+```bash
+node examples/node.mjs input.png output.png
+```
 
 See `examples/test.html` for a complete working example with:
 - File upload
@@ -320,12 +371,24 @@ See [AGENTS.md](AGENTS.md) for repository guidance shared by all coding agents.
 1. Fork the repository
 2. Create your feature branch
 3. Build: `pnpm build`
-4. Test: `pnpm test`
+4. Test: `pnpm test && pnpm test:integration`
 5. Submit a pull request
 
 ## Troubleshooting
 
-### Worker Loading Issues
+### Node Worker Loading Issues
+
+Import `libimagequant-wasm/node`, use Node.js 24+, and include the installed
+package's worker when deploying. Server bundlers should externalize this package
+or set `workerUrl` as described above. The `/worker` export is a browser worker;
+`/node-worker` is the prebuilt Node worker asset. They are loaded by the respective
+clients and are not interchangeable API constructors.
+
+A worker crash or unexpected exit rejects pending and subsequent calls. Dispose
+of that instance and create a new quantizer to recover. Always use `try/finally`
+for short-lived scripts so a live thread does not keep the process running.
+
+### Browser Worker Loading Issues
 Ensure the worker module is served from the same origin, or pass a custom `workerUrl` to the constructor.
 
 ### WASM Loading Issues
