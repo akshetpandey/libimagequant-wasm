@@ -1,7 +1,8 @@
 //! APNG compositing and shared-palette encoding, independent of JavaScript.
 use imagequant::{Attributes, Histogram, Image, RGBA};
 use png::{
-    BitDepth, BlendOp, ColorType, Decoder, DisposeOp, Encoder, FrameControl, Transformations,
+    BitDepth, BlendOp, ColorType, DecodeOptions, Decoder, DisposeOp, Encoder, FrameControl,
+    Transformations,
 };
 use std::io::Cursor;
 
@@ -46,7 +47,7 @@ fn dimensions(width: u32, height: u32, frames: u32, poster: bool) -> Result<usiz
 
 // Reader::finish validates the trailing stream but doesn't compare acTL's frame
 // count with the actual fcTL count. Never silently discard undeclared frames.
-fn validate_chunks(data: &[u8], expected_frames: u32) -> Result<(), String> {
+fn validate_chunks(data: &[u8], expected_frames: Option<u32>) -> Result<(), String> {
     let mut offset = 8usize;
     let mut frames = 0u32;
     let mut controls = 0;
@@ -76,7 +77,11 @@ fn validate_chunks(data: &[u8], expected_frames: u32) -> Result<(), String> {
             }
         }
         if kind == b"IEND" {
-            if length != 0 || end != data.len() || controls != 1 || frames != expected_frames {
+            if length != 0
+                || end != data.len()
+                || controls != u32::from(expected_frames.is_some())
+                || frames != expected_frames.unwrap_or(0)
+            {
                 return Err("APNG frame count or trailing data does not match its header".into());
             }
             return Ok(());
@@ -191,19 +196,26 @@ fn composite(
 }
 
 pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
-    let mut decoder = Decoder::new(Cursor::new(data));
+    // Animation chunks are ancillary to a static PNG decoder, but dropping one
+    // can change or corrupt playback. Treat their checksum failures as errors.
+    let mut options = DecodeOptions::default();
+    options.set_skip_ancillary_crc_failures(false);
+    let mut decoder = Decoder::new_with_options(Cursor::new(data), options);
     decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
     let mut reader = decoder
         .read_info()
         .map_err(|e| format!("Failed to read PNG info: {e}"))?;
     let Some(control) = reader.info().animation_control else {
+        // png deliberately ignores invalid acTL values. Such a file is not a
+        // valid static PNG for these APIs: do not silently report "unanimated".
+        validate_chunks(data, None)?;
         return Ok(None);
     };
     let width = reader.info().width;
     let height = reader.info().height;
     let separate_poster = reader.info().frame_control.is_none();
     let count = dimensions(width, height, control.num_frames, separate_poster)?;
-    validate_chunks(data, control.num_frames)?;
+    validate_chunks(data, Some(control.num_frames))?;
     let interlaced = reader.info().interlaced;
     let mut buffer = vec![
         0;

@@ -369,6 +369,40 @@ function rewrite(bytes, type, update, which = 0) {
   ]);
 }
 
+test('raw and worker APIs reject corrupt APNG checksums and invalid animation controls', async (t) => {
+  const q = new Quantizer();
+  t.after(() => q.dispose());
+  const original = compositingApng();
+  const corrupt = [
+    rewrite(original, 'acTL', (b) => b.writeUInt32BE(0)),
+    rewrite(original, 'acTL', (b) => b.writeUInt32BE(0x80000000, 4)),
+  ];
+  for (const type of ['acTL', 'fcTL', 'fdAT']) {
+    const bytes = Buffer.from(original);
+    for (let offset = 8; offset < bytes.length;) {
+      const length = bytes.readUInt32BE(offset);
+      if (bytes.toString('ascii', offset + 4, offset + 8) === type) {
+        bytes[offset + 8 + length] ^= 1;
+        break;
+      }
+      offset += 12 + length;
+    }
+    corrupt.push(bytes);
+  }
+  const raw = new wasm.ImageQuantizer();
+  try {
+    for (const bytes of corrupt) {
+      assert.throws(() => wasm.decode_png_animation(bytes));
+      assert.throws(() => raw.quantizePngAnimation(bytes));
+      await assert.rejects(q.quantizePng(bytes));
+    }
+    assert.equal(wasm.decode_png_animation(original).animation.frames.length, 4);
+    assert.equal((await q.quantizePng(original)).animation.frames.length, 4);
+  } finally {
+    raw.free();
+  }
+});
+
 test('rejects malformed APNG counts, sequences, rectangles, trailing data, and limits without poisoning the worker', async (t) => {
   const q = new Quantizer();
   t.after(() => q.dispose());
