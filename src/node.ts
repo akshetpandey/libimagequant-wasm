@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import QuantizerClient, { type WorkerTransport } from './client.js';
 import type { LibImageQuantOptions as ClientOptions, QuantizationResult as Result, RgbaImageData } from './types.js';
 
-export type { QuantizationOptions, RgbaImageData } from './types.js';
+export type { QuantizationOptions, RgbaImageData, RgbaImageInput } from './types.js';
 export type LibImageQuantOptions = Pick<ClientOptions, 'initTimeout' | 'operationTimeout'> & {
   /** Override the worker location when bundling or relocating the Node entry. */
   workerUrl?: URL;
@@ -32,7 +32,7 @@ class ThreadTransport implements WorkerTransport {
     this.onerror?.({ message: error.message, preventDefault() {} });
   }
 
-  postMessage(message: unknown) { this.thread.postMessage(message); }
+  postMessage(message: unknown, transfer: ArrayBuffer[] = []) { this.thread.postMessage(message, transfer); }
   terminate() { this.closed = true; return this.thread.terminate(); }
 }
 

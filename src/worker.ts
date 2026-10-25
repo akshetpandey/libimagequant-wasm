@@ -58,7 +58,7 @@ self.onmessage = async function (
       id,
       success: true,
       result,
-    });
+    }, [result.pngBytes.buffer, result.imageData.data.buffer]);
   } catch (error) {
     // Send error response
     self.postMessage({

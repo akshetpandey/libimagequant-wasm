@@ -62,6 +62,22 @@ test('the default constructor works without copying worker or WASM assets', asyn
   assert.deepEqual(await quantize({}), { palette: [[255, 0, 0, 255]], width: 1, height: 1 });
 });
 
+test('browser transfers preserve caller buffers and accept iframe byte views', async () => {
+  assert.deepEqual(await page.evaluate(async () => {
+    const { default: Quantizer } = await import('/dist/index.mjs');
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const data = new frame.contentWindow.Uint8ClampedArray([255, 0, 0, 255]);
+    const q = new Quantizer();
+    try {
+      const pending = q.quantizeImageData({ data, width: 1, height: 1 });
+      data.fill(0);
+      const result = await pending;
+      return { palette: result.palette, inputLength: data.byteLength, native: result.imageData instanceof ImageData };
+    } finally { q.dispose(); frame.remove(); }
+  }), { palette: [[255, 0, 0, 255]], inputLength: 4, native: true });
+});
+
 test('the embedded worker accepts a custom WASM directory', async () => {
   assert.equal((await quantize({ wasmUrl: '/assets/' })).width, 1);
 });

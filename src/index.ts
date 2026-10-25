@@ -3,7 +3,7 @@ import DefaultWorker from './worker?worker&inline';
 import QuantizerClient, { type WorkerTransport } from './client.js';
 import type { LibImageQuantOptions, QuantizationResult as Result } from './types.js';
 
-export type { QuantizationOptions, LibImageQuantOptions, RgbaImageData } from './types.js';
+export type { QuantizationOptions, LibImageQuantOptions, RgbaImageData, RgbaImageInput } from './types.js';
 export type QuantizationResult = Result<ImageData>;
 
 export default class LibImageQuant extends QuantizerClient<ImageData> {
@@ -19,7 +19,7 @@ export default class LibImageQuant extends QuantizerClient<ImageData> {
       const worker = options.workerUrl ? new Worker(options.workerUrl, { type: 'module' }) : new DefaultWorker();
       const transport: WorkerTransport = {
         onmessage: null, onerror: null,
-        postMessage: message => worker.postMessage(message),
+        postMessage: (message, transfer = []) => worker.postMessage(message, transfer),
         terminate: () => {
           worker.onmessage = null;
           worker.onerror = null;

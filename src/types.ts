@@ -14,6 +14,13 @@ export interface QuantizationOptions {
   posterization?: number;
 }
 
+/** Raw RGBA input, including Node Buffers and shared-memory byte views. */
+export interface RgbaImageInput {
+  data: Uint8Array | Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 export interface RgbaImageData {
   data: Uint8ClampedArray<ArrayBuffer>;
   width: number;

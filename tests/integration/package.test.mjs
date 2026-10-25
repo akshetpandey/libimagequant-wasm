@@ -84,6 +84,7 @@ for (const format of ['mts', 'cts']) {
         const q = new Quantizer();
         try {
           const result: QuantizationResult = await q.quantizePng(Buffer.from([]));
+          await q.quantizeImageData({ data: Buffer.from([255,0,0,255]), width: 1, height: 1 });
           const rgba: RgbaImageData = result.imageData;
           const png: Blob = new Blob([result.pngBytes]);
           console.log(rgba, png);

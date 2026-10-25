@@ -14,7 +14,7 @@ port.on('message', async (message: Request) => {
     if (message.action === 'quantize_png') result = await quantizePng(wasm, message.data);
     else if (message.action === 'quantize_imagedata') result = await quantizeImageData(wasm, message.data);
     else throw new Error('Unknown quantization action');
-    port.postMessage({ id: message.id, success: true, result });
+    port.postMessage({ id: message.id, success: true, result }, [result.pngBytes.buffer, result.imageData.data.buffer]);
   } catch (error) {
     port.postMessage({ id: message.id, success: false, error: error instanceof Error ? error.message : String(error) });
   }

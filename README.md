@@ -112,7 +112,8 @@ try {
 
 CommonJS: `const LibImageQuant = require('libimagequant-wasm/node')`.
 `quantizePng` accepts `Buffer`, `Uint8Array`, `ArrayBuffer`, and `Blob` inputs.
-`quantizeImageData` accepts `{ data: Uint8ClampedArray, width, height }` for raw
+`quantizeImageData` accepts `{ data: Uint8Array | Uint8ClampedArray, width, height }`
+(including a `Buffer` as `data`) for raw
 RGBA input. The Node constructor accepts `initTimeout` and `operationTimeout`;
 worker and WASM assets are resolved from the installed package. Its prebuilt
 worker does not inherit application-specific CLI loaders or flags. Dispose of
@@ -152,15 +153,19 @@ Quantizes a PNG image from binary data.
 
 ##### `quantizeImageData(imageData, options?)`
 
-Quantizes an `ImageData` object (e.g. from canvas).
+Quantizes an `ImageData` object (e.g. from canvas) or raw RGBA byte data.
 
-- `imageData`: `ImageData` - RGBA image data
+- `imageData`: `ImageData | RgbaImageInput` - RGBA image data
 - `options`: `QuantizationOptions` (optional)
 - Returns: `Promise<QuantizationResult>`
 
 ##### `dispose()`
 
 Terminates the worker, rejects any pending operations, and releases resources. Safe to call multiple times.
+
+Inputs are copied before transfer to the worker; the library never detaches your
+buffers. Blob reading also runs in the worker and is covered by operation timeout
+and disposal. Output byte arrays are independently owned by each result.
 
 ### QuantizationOptions
 

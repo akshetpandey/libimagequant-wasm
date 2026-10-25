@@ -69,6 +69,32 @@ test('Node disposal rejects initialization and subsequent calls', async () => {
   await assert.rejects(q.quantizePng(png), /disposed/);
 });
 
+test('Blob preparation is covered by disposal', async () => {
+  class SlowBlob extends Blob { arrayBuffer() { return new Promise(() => {}); } }
+  const q = new Quantizer();
+  const operation = q.quantizePng(new SlowBlob([png]));
+  q.dispose();
+  await assert.rejects(operation, /disposed/);
+});
+
+test('byte views preserve offsets and input ownership across worker transfers', async () => {
+  const q = new Quantizer();
+  try {
+    const storage = Buffer.concat([Buffer.alloc(7), png, Buffer.alloc(9)]);
+    const input = storage.subarray(7, 7 + png.length);
+    const pending = q.quantizePng(input);
+    input.fill(0);
+    assert.equal((await pending).width, 1);
+    assert.equal(storage.byteLength, png.length + 16);
+    const pixels = Buffer.from([255, 0, 0, 255]);
+    const result = await q.quantizeImageData({ data: pixels, width: 1, height: 1 });
+    assert.deepEqual([...pixels], [255, 0, 0, 255]);
+    assert.deepEqual([...result.imageData.data], [...pixels]);
+    await assert.rejects(q.quantizePng(new Uint16Array([1, 2])), /PNG input/);
+    await assert.rejects(q.quantizeImageData({ ...image(), data: [255, 0, 0, 255] }), /RGBA data/);
+  } finally { q.dispose(); }
+});
+
 test('Node works from eval input and exits after disposal', async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
     import Quantizer from 'libimagequant-wasm/node';

@@ -1,9 +1,9 @@
-import type { LibImageQuantOptions, QuantizationOptions, QuantizationResult, RgbaImageData } from './types.js';
+import type { LibImageQuantOptions, QuantizationOptions, QuantizationResult, RgbaImageData, RgbaImageInput } from './types.js';
 
 export interface WorkerTransport {
   onmessage: ((event: { data: { type?: string; id?: number; success?: boolean; result?: unknown; error?: string } }) => void) | null;
   onerror: ((error: { message?: string; preventDefault(): void }) => void) | null;
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer?: ArrayBuffer[]): void;
   terminate(): unknown;
 }
 
@@ -11,6 +11,13 @@ interface PendingOperation<T extends RgbaImageData> {
   resolve: (value: QuantizationResult<T>) => void;
   reject: (reason?: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+}
+
+// Brand checks keep byte inputs from iframes usable across realms, including
+// Buffer subclasses in Node. instanceof alone rejects those browser views.
+function isByteView(value: unknown): value is Uint8Array | Uint8ClampedArray {
+  return ArrayBuffer.isView(value)
+    && ['[object Uint8Array]', '[object Uint8ClampedArray]'].includes(Object.prototype.toString.call(value));
 }
 
 export default class QuantizerClient<T extends RgbaImageData> {
@@ -101,7 +108,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
   /**
    * Send a message to the worker and return a promise
    */
-  private async sendMessage(action: string, data: Record<string, unknown>): Promise<QuantizationResult<T>> {
+  private async sendMessage(action: string, data: Record<string, unknown>, transfer: ArrayBuffer[] = []): Promise<QuantizationResult<T>> {
     this.assertActive();
     await this.initPromise;
     this.assertActive();
@@ -119,7 +126,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
       this.pendingOperations.set(id, { resolve, reject, timer });
 
       try {
-        this.worker!.postMessage({ id, action, data });
+        this.worker!.postMessage({ id, action, data }, transfer);
       } catch (error) {
         this.pendingOperations.delete(id);
         clearTimeout(timer);
@@ -135,43 +142,52 @@ export default class QuantizerClient<T extends RgbaImageData> {
     pngData: Uint8Array | ArrayBuffer | Blob,
     options: QuantizationOptions = {}
   ): Promise<QuantizationResult<T>> {
-    let pngBytes: Uint8Array;
-
-    if (pngData instanceof Blob) {
-      const arrayBuffer = await pngData.arrayBuffer();
-      pngBytes = new Uint8Array(arrayBuffer);
-    } else if (pngData instanceof ArrayBuffer) {
+    this.assertActive();
+    let pngBytes: Uint8Array<ArrayBuffer> | Blob;
+    if (Object.prototype.toString.call(pngData) === '[object Blob]') {
+      // Blob reading belongs to the worker operation so timeout/disposal also
+      // cover asynchronous input preparation. Blobs are immutable and cloneable.
+      pngBytes = pngData as Blob;
+    } else if (Object.prototype.toString.call(pngData) === '[object ArrayBuffer]') {
+      pngBytes = new Uint8Array(new Uint8Array(pngData as ArrayBuffer));
+    } else if (isByteView(pngData) && Object.prototype.toString.call(pngData) === '[object Uint8Array]') {
+      // Own the transferred bytes without detaching or retaining the caller's
+      // Buffer pool, subarray, or shared memory.
       pngBytes = new Uint8Array(pngData);
     } else {
-      pngBytes = pngData;
+      throw new TypeError('PNG input must be a Uint8Array, ArrayBuffer, or Blob');
     }
 
     return this.sendMessage("quantize_png", {
-      pngBytes: Array.from(pngBytes),
+      pngBytes,
       options,
-    });
+    }, pngBytes instanceof Uint8Array ? [pngBytes.buffer] : []);
   }
 
   /**
    * Quantize from ImageData and return as PNG bytes or ImageData
    */
   async quantizeImageData(
-    imageData: RgbaImageData,
+    imageData: RgbaImageInput,
     options: QuantizationOptions = {}
   ): Promise<QuantizationResult<T>> {
     this.assertActive();
+    if (!imageData || !isByteView(imageData.data)) {
+      throw new TypeError('RGBA data must be a Uint8Array or Uint8ClampedArray');
+    }
     const length = imageData.width * imageData.height * 4;
     if (!Number.isInteger(imageData.width) || imageData.width <= 0 || imageData.width > 0xffffffff
       || !Number.isInteger(imageData.height) || imageData.height <= 0 || imageData.height > 0xffffffff
       || !Number.isSafeInteger(length) || length !== imageData.data.length) {
       throw new Error('Image data dimensions must be positive integers matching the RGBA byte length');
     }
+    const pixels = new Uint8ClampedArray(imageData.data);
     return this.sendMessage("quantize_imagedata", {
-      imageData: Array.from(imageData.data),
+      imageData: pixels,
       width: imageData.width,
       height: imageData.height,
       options,
-    });
+    }, [pixels.buffer]);
   }
 
   /**

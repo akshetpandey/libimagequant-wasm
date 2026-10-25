@@ -68,6 +68,14 @@ describe('LibImageQuant - Initialization', () => {
 });
 
 describe('LibImageQuant - quantizePng', () => {
+  it('rejects a pending Blob operation immediately on disposal', async () => {
+    class SlowBlob extends Blob { arrayBuffer(): Promise<ArrayBuffer> { return new Promise(() => {}); } }
+    const instance = createInstance();
+    const pending = instance.quantizePng(new SlowBlob(['pending']));
+    instance.dispose();
+    await expect(pending).rejects.toThrow(/disposed/);
+  });
+
   it('quantizes a solid-color PNG', async () => {
     const instance = createInstance();
     try {
