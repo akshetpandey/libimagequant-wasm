@@ -79,7 +79,13 @@ async function readRegistry(name) {
 
 export async function release(
   { version, dryRun = false },
-  { root = repository, execute = run, getRegistry = readRegistry, log = console.log } = {},
+  {
+    root = repository,
+    execute = run,
+    getRegistry = readRegistry,
+    pause = delay,
+    log = console.log,
+  } = {},
 ) {
   stableVersion(version);
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
@@ -127,16 +133,35 @@ export async function release(
   if (crate?.version !== version || lock?.match(/^version\s*=\s*"([^"]+)"/m)?.[1] !== version) {
     throw new Error('package.json, Cargo.toml, and Cargo.lock versions must agree');
   }
+  let recorded;
+  const recordPath = join(root, 'releases', `${tag}.json`);
+  try {
+    recorded = JSON.parse(await readFile(recordPath, 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  const confirmPublication = async (integrity) => {
+    log('npm accepted the upload; waiting up to 10 minutes for registry confirmation.');
+    for (let attempt = 0; attempt <= 40; attempt++) {
+      const publishedRelease = (await getRegistry(pkg.name)).versions?.[version];
+      if (publishedRelease) {
+        if (publishedRelease.gitHead !== head || publishedRelease.dist?.integrity !== integrity) {
+          throw new Error(
+            'Published commit/integrity does not match the submitted release artifact',
+          );
+        }
+        return;
+      }
+      if (attempt < 40) await pause(15000);
+    }
+    throw new Error(
+      'npm accepted the upload, but registry confirmation is still pending. Re-run the release command to verify without publishing again.',
+    );
+  };
   const published = await getRegistry(pkg.name);
   const existing = published.versions?.[version];
   if (existing) {
     if (existing.gitHead === head && remoteTag === head) {
-      let recorded;
-      try {
-        recorded = JSON.parse(await readFile(join(root, 'releases', `${tag}.json`), 'utf8'));
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-      }
       if (recorded?.gitHead === head && existing.dist?.integrity !== recorded.integrity) {
         throw new Error('Published integrity does not match the recorded release artifact');
       }
@@ -146,6 +171,20 @@ export async function release(
     throw new Error(
       `${pkg.name}@${version} is already published; bump the version or inspect its gitHead and tag`,
     );
+  }
+  if (recorded?.submitted) {
+    if (
+      recorded.name !== pkg.name ||
+      recorded.version !== version ||
+      recorded.gitHead !== head ||
+      remoteTag !== head ||
+      !recorded.integrity?.startsWith('sha512-')
+    ) {
+      throw new Error('Submitted release metadata does not match this commit and remote tag');
+    }
+    await confirmPublication(recorded.integrity);
+    log(`Confirmed ${pkg.name}@${version}; ${tag} points to ${head}.`);
+    return;
   }
   for (const previous of Object.keys(published.versions ?? {})) {
     if (/^\d+\.\d+\.\d+$/.test(previous) && compareVersions(version, previous) <= 0) {
@@ -162,6 +201,7 @@ export async function release(
   const artifacts = join(root, 'releases');
   const work = await mkdtemp(join(tmpdir(), 'libimagequant-release-'));
   let archive;
+  let submitted = false;
   try {
     // npm runs outside the pnpm-only repository, using the user's npm auth.
     if (!dryRun) await command('npm', ['whoami', `--registry=${registry}`], { cwd: work });
@@ -221,10 +261,8 @@ export async function release(
     await assertClean();
     if ((await git(['rev-parse', 'HEAD'])) !== head)
       throw new Error('HEAD changed during release validation');
-    await writeFile(
-      join(artifacts, `${tag}.json`),
-      `${JSON.stringify({ name: pkg.name, version, gitHead: head, tag, integrity, archive }, null, 2)}\n`,
-    );
+    const releaseRecord = { name: pkg.name, version, gitHead: head, tag, integrity, archive };
+    await writeFile(recordPath, `${JSON.stringify(releaseRecord, null, 2)}\n`);
     if (dryRun) {
       log(
         `Dry run passed. Artifact: ${archive}\nNo tags, branch updates, or npm publication were made.`,
@@ -263,23 +301,16 @@ export async function release(
       ],
       { cwd: work },
     );
-    let confirmed = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const publishedRelease = (await getRegistry(pkg.name)).versions?.[version];
-      if (publishedRelease?.gitHead === head && publishedRelease?.dist?.integrity === integrity) {
-        confirmed = true;
-        break;
-      }
-      if (attempt < 4) await delay(1000);
-    }
-    if (!confirmed) {
-      throw new Error(
-        'npm publication returned, but registry gitHead/integrity are not yet confirmed. Re-run the release command to check.',
-      );
-    }
+    submitted = true;
+    await writeFile(recordPath, `${JSON.stringify({ ...releaseRecord, submitted }, null, 2)}\n`);
+    await confirmPublication(integrity);
     log(`Published ${pkg.name}@${version}; ${tag} points to ${head}.\nArtifact: ${archive}`);
   } catch (error) {
-    if (archive)
+    if (archive && submitted)
+      log(
+        `npm accepted the upload. Preserved artifact: ${archive}. Retry to verify; do not republish manually.`,
+      );
+    else if (archive)
       log(
         `Preserved artifact: ${archive}. Retry with pnpm release ${version} after correcting the failure; existing matching tags are reused.`,
       );

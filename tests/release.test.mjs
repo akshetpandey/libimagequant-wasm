@@ -87,6 +87,7 @@ async function fixture(t) {
     root,
     execute,
     getRegistry: () => Promise.resolve(structuredClone(state)),
+    pause: () => Promise.resolve(),
     log() {},
   };
   return { root, git, head, calls, state, dependencies };
@@ -189,6 +190,78 @@ test('an already published release must match its recorded artifact integrity', 
   await release({ version: '0.4.0' }, f.dependencies);
   f.state.versions['0.4.0'].dist.integrity = 'sha512-wrong';
   await assert.rejects(release({ version: '0.4.0' }, f.dependencies), /Published integrity/);
+  assert.equal(publications(f.calls).length, 1);
+});
+
+test('waits for an accepted upload to become visible without publishing again', async (t) => {
+  const f = await fixture(t);
+  let accepted = false;
+  let hiddenReads = 3;
+  let pauses = 0;
+  const execute = async (command, args, options) => {
+    const output = await f.dependencies.execute(command, args, options);
+    if (command === 'npm' && args[0] === 'publish' && !args.includes('--dry-run')) accepted = true;
+    return output;
+  };
+  const getRegistry = async () => {
+    const metadata = await f.dependencies.getRegistry();
+    if (accepted && hiddenReads-- > 0) delete metadata.versions['0.4.0'];
+    return metadata;
+  };
+  await release(
+    { version: '0.4.0' },
+    {
+      ...f.dependencies,
+      execute,
+      getRegistry,
+      pause: async () => {
+        pauses++;
+      },
+    },
+  );
+  assert.equal(pauses, 3);
+  assert.equal(publications(f.calls).length, 1);
+  const record = JSON.parse(await readFile(join(f.root, 'releases/v0.4.0.json'), 'utf8'));
+  assert.equal(record.submitted, true);
+});
+
+test('a retry after acceptance only verifies the saved submission', async (t) => {
+  const f = await fixture(t);
+  const hiddenRegistry = async () => {
+    const metadata = await f.dependencies.getRegistry();
+    delete metadata.versions['0.4.0'];
+    return metadata;
+  };
+  await assert.rejects(
+    release({ version: '0.4.0' }, { ...f.dependencies, getRegistry: hiddenRegistry }),
+    /confirmation is still pending/,
+  );
+  const before = f.calls.length;
+  let hiddenReads = 3;
+  await release(
+    { version: '0.4.0' },
+    {
+      ...f.dependencies,
+      getRegistry: () => (hiddenReads-- > 0 ? hiddenRegistry() : f.dependencies.getRegistry()),
+    },
+  );
+  assert.equal(publications(f.calls).length, 1);
+  assert(!f.calls.slice(before).some(({ command }) => command === 'npm' || command === 'pnpm'));
+});
+
+test('an accepted upload with the wrong registry integrity fails confirmation', async (t) => {
+  const f = await fixture(t);
+  const execute = async (command, args, options) => {
+    const output = await f.dependencies.execute(command, args, options);
+    if (command === 'npm' && args[0] === 'publish' && !args.includes('--dry-run')) {
+      f.state.versions['0.4.0'].dist.integrity = 'sha512-wrong';
+    }
+    return output;
+  };
+  await assert.rejects(
+    release({ version: '0.4.0' }, { ...f.dependencies, execute }),
+    /Published commit\/integrity does not match/,
+  );
   assert.equal(publications(f.calls).length, 1);
 });
 

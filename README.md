@@ -348,6 +348,11 @@ user configuration or environment; npm runs outside the repo so `devEngines`
 does not block authentication or tarball publishing. npm may request publishing
 2FA in your terminal.
 
+npm may accept an upload before the version becomes available. The command records
+that acceptance and waits up to ten minutes for registry confirmation. If processing
+takes longer, rerun at the same commit to verify the recorded submission without
+building or publishing it again. Preserve `releases/v<version>.json` when retrying.
+
 ## Testing
 
 Browser tests run in a real browser via [Vitest](https://vitest.dev/) with `@vitest/browser` and Playwright. The actual WASM module is loaded and executed. Node integration tests exercise worker threads, ESM/CommonJS packages, strict TypeScript without DOM types, and installed tarball consumers.

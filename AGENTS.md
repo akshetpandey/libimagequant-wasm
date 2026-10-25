@@ -62,6 +62,7 @@ These instructions apply to all coding agents working in this repository.
 - `releases/` contains ignored artifacts and integrity metadata. Integration tests use `RELEASE_TARBALL` when validating a release so they install the archive that will actually be published.
 - Run npm auth/publish commands outside the repository's pnpm-only devEngines. Use the documented subshell for login.
 - After a failed publication, retry at the same commit; preserve matching tags and inspect conflicts. Never move a published release tag.
+- npm can process accepted uploads asynchronously. Preserve release metadata: accepted submissions are retried by verification only, with up to ten minutes for registry visibility.
 
 ## Validation and changes
 
