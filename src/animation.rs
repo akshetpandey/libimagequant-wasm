@@ -236,7 +236,16 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         {
             return Err("APNG default animation frame must cover the canvas".into());
         }
-        let previous = (fc.dispose_op == DisposeOp::Previous).then(|| canvas.clone());
+        // The PNG decoder has checked the rectangle bounds. PREVIOUS only needs
+        // to save that rectangle, even when the output frame is a full canvas.
+        let previous = (fc.dispose_op == DisposeOp::Previous).then(|| {
+            let mut saved = Vec::with_capacity(fc.width as usize * fc.height as usize);
+            for y in 0..fc.height as usize {
+                let start = (y + fc.y_offset as usize) * width as usize + fc.x_offset as usize;
+                saved.extend_from_slice(&canvas[start..start + fc.width as usize]);
+            }
+            saved
+        });
         composite(&mut canvas, &pixels, fc, width, height)?;
         frames.push(Frame {
             pixels: canvas.clone(),
@@ -245,7 +254,16 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         });
         match fc.dispose_op {
             DisposeOp::None => {}
-            DisposeOp::Previous => canvas = previous.unwrap(),
+            DisposeOp::Previous => {
+                for (y, row) in previous
+                    .unwrap()
+                    .chunks_exact(fc.width as usize)
+                    .enumerate()
+                {
+                    let start = (y + fc.y_offset as usize) * width as usize + fc.x_offset as usize;
+                    canvas[start..start + fc.width as usize].copy_from_slice(row);
+                }
+            }
             DisposeOp::Background => {
                 for y in 0..fc.height as usize {
                     let start = (y + fc.y_offset as usize) * width as usize + fc.x_offset as usize;

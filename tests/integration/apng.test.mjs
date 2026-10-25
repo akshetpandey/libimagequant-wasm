@@ -194,6 +194,68 @@ test('normalizes interlaced offset subframes using the canvas stride', async (t)
   ]);
 });
 
+test('previous disposal restores an offset rectangle across multiple rows', async (t) => {
+  const q = new Quantizer();
+  t.after(() => q.dispose());
+  const result = await q.quantizePng(
+    makeApng({
+      width: 3,
+      height: 3,
+      frames: [
+        { samples: Array(9).fill(red).flat() },
+        { width: 2, height: 2, x: 1, y: 1, samples: Array(4).fill(blue).flat(), dispose: 2 },
+        { width: 1, height: 1, x: 2, y: 2, samples: clear, blend: 1 },
+      ],
+    }),
+    { dithering: 0 },
+  );
+  check(result, [
+    Array(9).fill(red).flat(),
+    [...red, ...red, ...red, ...red, ...blue, ...blue, ...red, ...blue, ...blue],
+    Array(9).fill(red).flat(),
+  ]);
+});
+
+test('one-pixel previous disposal does not allocate another full WASM canvas', async () => {
+  const binary = await readFile(
+    new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url),
+  );
+  const samples = Array(1024 * 1024)
+    .fill(red)
+    .flat();
+  const peaks = [];
+  for (const dispose of [0, 2]) {
+    // Separate glue instances give each run a fresh allocator and memory high-water mark.
+    const url = new URL('../../dist/wasm/libimagequant_wasm.js', import.meta.url);
+    url.searchParams.set('disposal-memory', dispose);
+    const raw = await import(url.href);
+    const { memory } = raw.initSync({ module: binary });
+    const result = raw.decode_png_animation(
+      makeApng({
+        width: 1024,
+        height: 1024,
+        frames: [
+          { samples },
+          { width: 1, height: 1, x: 512, y: 512, samples: blue },
+          { width: 1, height: 1, x: 513, y: 513, samples: green, dispose },
+        ],
+      }),
+    );
+    assert.equal(result.animation.frames.length, 3);
+    assert.deepEqual(
+      [
+        ...result.animation.frames[2].imageData.data.subarray(
+          (513 * 1024 + 513) * 4,
+          (513 * 1024 + 513) * 4 + 4,
+        ),
+      ],
+      green,
+    );
+    peaks.push(memory.buffer.byteLength);
+  }
+  assert(peaks[1] <= peaks[0] + 65536, `PREVIOUS added ${peaks[1] - peaks[0]} bytes for one pixel`);
+});
+
 for (const fixture of [
   {
     name: 'one-bit indexed alpha',
