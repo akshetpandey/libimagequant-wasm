@@ -15,12 +15,11 @@ A TypeScript/JavaScript WebAssembly wrapper for the [libimagequant](https://gith
 ## Installation
 
 ```bash
-npm install libimagequant-wasm
+pnpm add libimagequant-wasm
 ```
 
 ### Requirements
 
-- Node.js >= 20.19.0
 - Modern browser with WebAssembly and Web Worker support
 
 ## Quick Start
@@ -162,8 +161,9 @@ Terminates the worker, rejects any pending operations, and releases resources. S
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) with the `wasm32-unknown-unknown` target
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
-- Node.js >= 20.19.0
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) 0.15.0 or newer
+- Node.js 24 LTS (^24.22.1; see `.node-version` and `devEngines.runtime` in `package.json`)
+- [pnpm](https://pnpm.io/installation) 12.15.0 (pinned in `package.json`)
 - [wasm-opt](https://github.com/WebAssembly/binaryen) (optional, for WASM size optimization)
 
 ### Setup
@@ -171,28 +171,32 @@ Terminates the worker, rejects any pending operations, and releases resources. S
 ```bash
 # Install Rust and wasm-pack
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+cargo install wasm-pack --locked --version 0.15.0
 rustup target add wasm32-unknown-unknown
 
 # Install dependencies
-npm install
+pnpm install --frozen-lockfile
+
+# Install the test browser
+pnpm exec playwright install chromium
 
 # Build
-npm run build
+pnpm build
 ```
 
 ### Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run build` | Full build (WASM + TypeScript + types) |
-| `npm run build:wasm` | Build WASM module only |
-| `npm run build:types` | Generate TypeScript declarations only |
-| `npm run typecheck` | Run TypeScript type checking |
-| `npm test` | Run tests (vitest + browser) |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run dev` | Start Vite dev server |
-| `npm run clean` | Remove build output |
+| `pnpm build` | Full build (WASM + TypeScript + types) |
+| `pnpm build:wasm` | Build WASM module only |
+| `pnpm build:types` | Generate TypeScript declarations only |
+| `pnpm typecheck` | Run TypeScript type checking |
+| `pnpm test` | Run tests (Vitest + headless Chromium; build first) |
+| `pnpm test:package` | Validate built package files |
+| `pnpm test:watch` | Run tests in watch mode |
+| `pnpm dev` | Start Vite dev server |
+| `pnpm clean` | Remove build output |
 
 ## Testing
 
@@ -200,10 +204,15 @@ Tests run in a real browser via [Vitest](https://vitest.dev/) with `@vitest/brow
 
 ```bash
 # Build first (tests run against built output)
-npm run build
+pnpm build
 
 # Run tests (headless Chromium)
-npm test
+pnpm test
+
+# Validate package files and check Rust
+pnpm test:package
+cargo check --locked --target wasm32-unknown-unknown
+cargo test --locked
 ```
 
 The test suite covers:
@@ -244,10 +253,12 @@ MIT License - See LICENSE file for details.
 
 ## Contributing
 
+See [AGENTS.md](AGENTS.md) for repository guidance shared by all coding agents.
+
 1. Fork the repository
 2. Create your feature branch
-3. Build: `npm run build`
-4. Test: `npm test`
+3. Build: `pnpm build`
+4. Test: `pnpm test`
 5. Submit a pull request
 
 ## Troubleshooting

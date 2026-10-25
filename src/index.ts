@@ -72,6 +72,9 @@ export default class LibImageQuant {
     this.initTimeout = options.initTimeout || 10000;
     this.operationTimeout = options.operationTimeout || 30000;
     this.initPromise = this.initialize();
+    // Initialization can fail before a caller awaits an operation. Mark it as
+    // handled now while preserving the rejected promise for subsequent callers.
+    this.initPromise.catch(() => {});
   }
 
   /**
@@ -221,8 +224,5 @@ export default class LibImageQuant {
     }
 
     this.isReady = false;
-
-    // Suppress unhandled rejection from init promise if still pending
-    this.initPromise.catch(() => {});
   }
 }

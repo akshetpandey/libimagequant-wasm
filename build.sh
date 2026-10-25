@@ -8,7 +8,7 @@ echo "Building libimagequant WASM module..."
 # Check if wasm-pack is installed
 if ! command -v wasm-pack &> /dev/null; then
     echo "Error: wasm-pack is not installed. Please install it with:"
-    echo "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh"
+    echo "cargo install wasm-pack --locked --version 0.15.0"
     exit 1
 fi
 
@@ -26,7 +26,7 @@ rm -rf pkg/ target/
 
 # Build with wasm-pack for web target
 echo "Building WASM module..."
-wasm-pack build --target web --out-dir pkg
+wasm-pack build --target web --out-dir pkg -- --locked
 
 # Optimize WASM if wasm-opt is available
 if command -v wasm-opt &> /dev/null; then
@@ -41,5 +41,5 @@ fi
 echo "Build complete! Files generated in pkg/ directory."
 echo ""
 echo "To test the module:"
-echo "1. npm run serve"
-echo "2. Open http://localhost:8080/test.html"
+echo "1. pnpm build && pnpm serve"
+echo "2. Open http://localhost:8080/examples/test.html"

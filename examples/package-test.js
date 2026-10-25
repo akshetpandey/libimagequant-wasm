@@ -27,7 +27,7 @@ async function validatePackage() {
     
     for (const file of filesToCheck) {
         try {
-            await checkAccess(resolve(process.cwd(), '..', file), constants.F_OK);
+            await checkAccess(resolve(import.meta.dirname, '..', file), constants.F_OK);
             console.log(`✅ ${file}`);
         } catch (error) {
             console.log(`❌ ${file} - NOT FOUND`);
@@ -40,9 +40,14 @@ async function validatePackage() {
     if (allFilesExist) {
         console.log('\n🎉 Package is ready for NPM publishing!');
         console.log('\nNext steps:');
-        console.log('1. npm run build (final build)');
-        console.log('2. npm publish (publish to NPM)');
+        console.log('1. pnpm build (final build)');
+        console.log('2. pnpm publish (publish to NPM)');
+    } else {
+        process.exitCode = 1;
     }
 }
 
-validatePackage().catch(console.error);
+validatePackage().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

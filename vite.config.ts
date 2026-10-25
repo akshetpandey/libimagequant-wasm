@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import { resolve } from 'path'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { copyFile, mkdir, rm } from 'node:fs/promises'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 // Plugin to build WASM
 const wasmPlugin = () => {
@@ -18,7 +19,7 @@ const wasmPlugin = () => {
       console.log('Building WASM module...')
       try {
         // Build WASM to temporary directory first
-        const { stdout, stderr } = await execAsync('PATH=/Users/akshet/.cargo/bin:$PATH wasm-pack build --target web --out-dir pkg')
+        const { stderr } = await execFileAsync('wasm-pack', ['build', '--target', 'web', '--out-dir', 'pkg', '--', '--locked'])
         if (stderr) console.warn('WASM build warnings:', stderr)
         console.log('WASM build completed')
       } catch (error) {
@@ -33,7 +34,7 @@ const wasmPlugin = () => {
 
       try {
         // Create dist/wasm directory
-        await execAsync('mkdir -p dist/wasm')
+        await mkdir('dist/wasm', { recursive: true })
 
         // Copy only the WASM-specific files (not LICENSE, README.md, package.json)
         const filesToCopy = [
@@ -44,15 +45,11 @@ const wasmPlugin = () => {
         ]
 
         for (const file of filesToCopy) {
-          try {
-            await execAsync(`cp pkg/${file} dist/wasm/`)
-          } catch (err) {
-            console.warn(`Warning: Could not copy ${file}:`, err)
-          }
+          await copyFile(`pkg/${file}`, `dist/wasm/${file}`)
         }
 
         // Clean up temporary directory
-        await execAsync('rm -rf pkg')
+        await rm('pkg', { recursive: true, force: true })
 
         console.log('WASM files copied to dist/wasm')
       } catch (error) {

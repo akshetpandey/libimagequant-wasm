@@ -48,6 +48,23 @@ describe('LibImageQuant - Initialization', () => {
     // Allow time for any async error handlers to settle
     await new Promise(resolve => setTimeout(resolve, 100));
   });
+
+  it('reports initialization failures to operations started after the worker fails', async () => {
+    const instance = new LibImageQuant({
+      workerUrl: '/nonexistent-worker.mjs',
+      initTimeout: 500,
+    });
+    try {
+      // Let initialization reject before attaching an operation's error handler.
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const imageData = createTestImageData(4, 4, 'solid-red');
+      await expect(instance.quantizeImageData(imageData)).rejects.toThrow(
+        /Worker (error|initialization timeout)/
+      );
+    } finally {
+      instance.dispose();
+    }
+  });
 });
 
 describe('LibImageQuant - quantizePng', () => {
