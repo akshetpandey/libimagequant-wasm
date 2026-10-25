@@ -405,6 +405,25 @@ describe('LibImageQuant - Concurrent operations', () => {
 });
 
 describe('LibImageQuant - Error handling', () => {
+  it('rejects pending and future operations when a ready worker crashes', async () => {
+    const url = URL.createObjectURL(new Blob([
+      `self.onmessage = () => setTimeout(() => { throw new Error('crash fixture'); }, 0);
+       self.postMessage({ type: 'ready' });`,
+    ], { type: 'text/javascript' }));
+    const instance = createInstance({ workerUrl: url, operationTimeout: 5000 });
+    const data = createTestImageData(1, 1, 'solid-red');
+    try {
+      const results = await Promise.allSettled([
+        instance.quantizeImageData(data), instance.quantizeImageData(data),
+      ]);
+      for (const result of results) {
+        expect(result.status).toBe('rejected');
+        if (result.status === 'rejected') expect(result.reason.message).toMatch(/Worker error:/);
+      }
+      await expect(instance.quantizeImageData(data)).rejects.toThrow(/Worker error:/);
+    } finally { instance.dispose(); URL.revokeObjectURL(url); }
+  }, 1000);
+
   it('rejects on invalid PNG data', async () => {
     const instance = createInstance();
     try {

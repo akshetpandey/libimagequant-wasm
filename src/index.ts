@@ -58,6 +58,7 @@ interface PendingOperation {
 export default class LibImageQuant {
   private worker: Worker | null = null;
   private disposed = false;
+  private failure?: Error;
   private initTimer?: ReturnType<typeof setTimeout>;
   private rejectInitialization?: (error: Error) => void;
   private isReady: boolean = false;
@@ -136,8 +137,8 @@ export default class LibImageQuant {
 
         this.worker.onerror = (error) => {
           error.preventDefault();
-          clearTimeout(this.initTimer);
-          reject(new Error(`Worker error: ${error.message}`));
+          this.failure = new Error(`Worker error: ${error.message || 'Worker execution failed'}`);
+          this.shutdown(this.failure);
         };
       } catch (error) {
         reject(error);
@@ -225,6 +226,7 @@ export default class LibImageQuant {
 
   private assertActive() {
     if (this.disposed) throw new Error("LibImageQuant disposed");
+    if (this.failure) throw this.failure;
   }
 
   private shutdown(error: Error) {
