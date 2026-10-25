@@ -20,6 +20,13 @@ const wasmPlugin = () => {
 
   return {
     name: 'wasm-build',
+    renderChunk(_code, chunk, output) {
+      if (chunk.name === 'worker' && output.format === 'cjs') {
+        // A browser worker has a module URL only in ESM. Delegate rather than
+        // emitting an implementation with erased import.meta.url expressions.
+        return { code: "void import('./worker.mjs');\n", map: { mappings: '' } }
+      }
+    },
     buildStart: async () => {
       if (hasBuiltWasm) return;
       hasBuiltWasm = true;
