@@ -6,6 +6,8 @@ export type { QuantizationOptions, RgbaImageData, RgbaImageInput } from './types
 export type LibImageQuantOptions = Pick<ClientOptions, 'initTimeout' | 'operationTimeout'> & {
   /** Override the worker location when bundling or relocating the Node entry. */
   workerUrl?: URL;
+  /** Worker environment; defaults to a copy of process.env, including NODE_OPTIONS. */
+  workerEnv?: Record<string, string | undefined>;
 };
 export type QuantizationResult = Result<RgbaImageData>;
 
@@ -15,12 +17,12 @@ class ThreadTransport implements WorkerTransport {
   private closed = false;
   private thread: Worker;
 
-  constructor(workerUrl?: URL) {
+  constructor(workerUrl?: URL, env?: Record<string, string | undefined>) {
     // The Node-platform build preserves this in ESM and supplies the correct
     // __filename-based URL in CommonJS, without consulting application globals.
     const base = import.meta.url;
     // The bundled worker needs no app loaders or process-specific CLI flags.
-    this.thread = new Worker(workerUrl ?? new URL('./node-worker.mjs', base), { execArgv: [] });
+    this.thread = new Worker(workerUrl ?? new URL('./node-worker.mjs', base), { execArgv: [], env });
     this.thread.on('message', data => this.onmessage?.({ data }));
     this.thread.on('error', error => this.fail(error));
     this.thread.on('messageerror', error => this.fail(error));
@@ -41,6 +43,6 @@ class ThreadTransport implements WorkerTransport {
 export default class LibImageQuant extends QuantizerClient<RgbaImageData> {
   constructor(options: LibImageQuantOptions = {}) {
     super({ initTimeout: options.initTimeout, operationTimeout: options.operationTimeout },
-      () => new ThreadTransport(options.workerUrl));
+      () => new ThreadTransport(options.workerUrl, options.workerEnv));
   }
 }

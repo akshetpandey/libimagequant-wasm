@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, symlink, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, writeFile, readFile, copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,7 +81,7 @@ for (const format of ['mts', 'cts']) {
     await typecheck(`${statement}
       import type { QuantizationResult, RgbaImageData } from 'libimagequant-wasm/node';
       async function run() {
-        const q = new Quantizer();
+        const q = new Quantizer({ workerEnv: { ...process.env } });
         try {
           const result: QuantizationResult = await q.quantizePng(Buffer.from([]));
           await q.quantizeImageData({ data: Buffer.from([255,0,0,255]), width: 1, height: 1 });
@@ -110,7 +110,9 @@ for (const format of ['es', 'cjs']) {
     } });
     const { pathToFileURL } = await import('node:url');
     const { run } = await import(pathToFileURL(join(outDir, `app.${format === 'es' ? 'mjs' : 'cjs'}`)));
-    assert.equal(await run(new URL(import.meta.resolve('libimagequant-wasm/node-worker'))), 1);
+    const worker = join(outDir, 'relocated-worker.mjs');
+    await copyFile(new URL(import.meta.resolve('libimagequant-wasm/node-worker')), worker);
+    assert.equal(await run(pathToFileURL(worker)), 1);
   });
 }
 

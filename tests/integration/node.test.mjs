@@ -6,6 +6,9 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { once } from 'node:events';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Quantizer from 'libimagequant-wasm/node';
 import png16 from '../fixtures/png-16bit.json' with { type: 'json' };
 
@@ -157,4 +160,24 @@ test('the exported Node worker survives malformed requests', async () => {
     worker.postMessage({ id: 1, action: 'quantize_imagedata', data: { imageData: [255,0,0,255], width: 1, height: 1 } });
     assert.deepEqual((await response)[0].result.palette, [[255,0,0,255]]);
   } finally { await worker.terminate(); }
+});
+
+test('Node worker environment overrides isolate NODE_OPTIONS preloads', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'libimagequant-preload-'));
+  try {
+    const preload = join(directory, 'preload.cjs');
+    await writeFile(preload, "if (!require('node:worker_threads').isMainThread) throw new Error('app-only preload');");
+    for (const statement of ["import Q from 'libimagequant-wasm/node';", "import { createRequire } from 'node:module'; const Q = createRequire(import.meta.url)('libimagequant-wasm/node');"]) {
+      const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
+        ${statement}
+        const q = new Q({ workerEnv: { ...process.env, NODE_OPTIONS: '' } });
+        try {
+          console.log((await q.quantizeImageData({ data: new Uint8Array([255,0,0,255]), width:1, height:1 })).width);
+          console.log(process.env.NODE_OPTIONS.includes('preload.cjs'));
+        } finally { q.dispose(); }
+      `], { cwd: fileURLToPath(new URL('../../', import.meta.url)),
+        env: { ...process.env, NODE_OPTIONS: `--require=${preload}` }, timeout: 5000 });
+      assert.deepEqual(stdout.trim().split(/\r?\n/), ['1', 'true']);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
