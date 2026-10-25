@@ -33,20 +33,27 @@ interface ImageDataQuantizationData {
 }
 
 let isInitialized: boolean = false;
+let initialization: Promise<boolean> | undefined;
 let wasmModule: any = null;
 let customWasmUrl: string | undefined = undefined;
 
 // Initialize WASM module
 async function initializeWasm(): Promise<boolean> {
-  if (!isInitialized) {
+  if (isInitialized) return true;
+  if (!initialization) initialization = (async () => {
     // Initialize the WASM module
     const wasmLoaderPath = new URL("./wasm/libimagequant_wasm.js", import.meta.url).href;
     wasmModule = await import(wasmLoaderPath);
     // Use custom WASM URL if provided, otherwise use default relative path
     await wasmModule.default(customWasmUrl);
     isInitialized = true;
-  }
-  return true;
+    return true;
+  })().catch(error => {
+    // A failed load can be retried after correcting the asset configuration.
+    initialization = undefined;
+    throw error;
+  });
+  return initialization;
 }
 
 // Message handler for worker
