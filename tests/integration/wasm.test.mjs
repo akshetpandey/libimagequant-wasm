@@ -49,3 +49,13 @@ test('rejects numeric options before integer narrowing or rounding', () => {
     } finally { result.free(); }
   } finally { q.free(); }
 });
+
+test('rejects PNG palette indices without a corresponding color', () => {
+  const palette = [[255, 0, 0, 255]];
+  for (const index of [1, 255]) {
+    assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([index]), palette, 1, 1), /outside the palette/);
+  }
+  assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([0]), [], 1, 1), /at least one color/);
+  const png = wasm.encode_palette_to_png(new Uint8Array([0]), palette, 1, 1);
+  assert.deepEqual([...wasm.decode_png_to_rgba(png)[0]], palette[0]);
+});

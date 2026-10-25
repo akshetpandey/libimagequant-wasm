@@ -306,6 +306,12 @@ pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, widt
     if palette_colors.len() > 256 {
         return Err(JsValue::from_str("Palette too large for PNG (max 256 colors)"));
     }
+    if palette_colors.is_empty() {
+        return Err(JsValue::from_str("Palette must contain at least one color"));
+    }
+    if indices.iter().any(|&index| index as usize >= palette_colors.len()) {
+        return Err(JsValue::from_str("Palette index is outside the palette"));
+    }
     
     let mut png_data = Vec::new();
     {
