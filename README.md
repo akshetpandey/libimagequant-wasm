@@ -273,6 +273,12 @@ Ensure the worker module is served from the same origin, or pass a custom `worke
 - Ensure proper MIME type for `.wasm` files (`application/wasm`)
 - Pass a custom `wasmUrl` if the WASM files are hosted separately
 
+`wasmUrl` names the directory containing both `libimagequant_wasm.js` and
+`libimagequant_wasm_bg.wasm`. Absolute URLs and paths relative to the worker are
+supported. For example, `{ workerUrl: '/workers/worker.mjs', wasmUrl: '/assets/quantizer/' }`.
+A URL ending in `.wasm` overrides only the binary; the JavaScript loader stays
+next to the worker's default `wasm/` directory.
+
 ### Performance Issues
 - Large images may take significant time to quantize
 - Consider resizing images before quantization

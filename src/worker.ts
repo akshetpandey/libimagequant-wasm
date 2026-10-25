@@ -42,10 +42,14 @@ async function initializeWasm(): Promise<boolean> {
   if (isInitialized) return true;
   if (!initialization) initialization = (async () => {
     // Initialize the WASM module
-    const wasmLoaderPath = new URL("./wasm/libimagequant_wasm.js", import.meta.url).href;
+    const binaryOverride = customWasmUrl && /\.wasm(?:[?#]|$)/i.test(customWasmUrl);
+    const directory = new URL(customWasmUrl && !binaryOverride
+      ? customWasmUrl.replace(/\/?$/, '/') : './wasm/', import.meta.url);
+    const wasmLoaderPath = new URL('libimagequant_wasm.js', directory).href;
     wasmModule = await import(wasmLoaderPath);
-    // Use custom WASM URL if provided, otherwise use default relative path
-    await wasmModule.default(customWasmUrl);
+    const binary = binaryOverride ? new URL(customWasmUrl!, import.meta.url).href
+      : new URL('libimagequant_wasm_bg.wasm', directory).href;
+    await wasmModule.default({ module_or_path: binary });
     isInitialized = true;
     return true;
   })().catch(error => {
