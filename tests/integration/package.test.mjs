@@ -5,6 +5,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const exec = promisify(execFile);
+
+async function typecheck(source, extension = 'mts') {
+  const file = `consumer.${extension}`;
+  await writeFile(join(directory, file), source);
+  const config = join(directory, `tsconfig.${extension}.json`);
+  await writeFile(config, JSON.stringify({
+    compilerOptions: { module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2025',
+      lib: ['ES2025', 'DOM'], types: [], strict: true, noEmit: true },
+    files: [file],
+  }));
+  await exec(process.execPath, [fileURLToPath(new URL('../../node_modules/typescript/bin/tsc', import.meta.url)), '-p', config], { cwd: directory });
+}
 
 let directory;
 before(async () => {
@@ -36,4 +52,12 @@ test('production bundlers preserve the exported worker setup', async () => {
     if (previous) Object.defineProperty(globalThis, 'self', previous);
     else delete globalThis.self;
   }
+});
+
+test('browser results can be saved directly as a Blob with strict TypeScript', async () => {
+  await typecheck(`import Quantizer from 'libimagequant-wasm';
+    const result = await new Quantizer().quantizePng(new Uint8Array());
+    const blob: Blob = new Blob([result.pngBytes], { type: 'image/png' });
+    const image: ImageData = result.imageData;
+    console.log(blob, image);`);
 });

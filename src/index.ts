@@ -25,7 +25,7 @@ export interface QuantizationResult {
   /** Color palette array */
   palette: number[][];
   /** PNG bytes (Uint8Array) - quantized image as indexed PNG */
-  pngBytes: Uint8Array;
+  pngBytes: Uint8Array<ArrayBuffer>;
   /** ImageData object - quantized image as RGBA data */
   imageData: ImageData;
   /** Achieved quality (0-1) */
