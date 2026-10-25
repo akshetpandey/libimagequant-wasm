@@ -104,7 +104,9 @@ impl ImageQuantizer {
         // Convert u8 data to RGBA array
         let rgba_pixels: Vec<RGBA> = rgba_data
             .to_vec()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
 
@@ -181,7 +183,9 @@ impl QuantizationResult {
 
         let rgba_pixels: Vec<RGBA> = rgba_data
             .to_vec()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
 
@@ -237,7 +241,9 @@ impl QuantizationResult {
 
         let rgba_pixels: Vec<RGBA> = rgba_data
             .to_vec()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
 
@@ -299,7 +305,7 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
         ColorType::Rgba => buf.to_vec(),
         ColorType::Rgb => {
             let mut rgba_buf = Vec::with_capacity(buf.len() / 3 * 4);
-            for chunk in buf.chunks_exact(3) {
+            for chunk in buf.as_chunks::<3>().0 {
                 rgba_buf.extend_from_slice(chunk);
                 rgba_buf.push(255); // Add alpha channel
             }
@@ -307,7 +313,7 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
         }
         ColorType::GrayscaleAlpha => {
             let mut rgba_buf = Vec::with_capacity(buf.len() * 2);
-            for chunk in buf.chunks_exact(2) {
+            for chunk in buf.as_chunks::<2>().0 {
                 let gray = chunk[0];
                 let alpha = chunk[1];
                 rgba_buf.extend_from_slice(&[gray, gray, gray, alpha]);
