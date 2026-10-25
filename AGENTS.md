@@ -48,6 +48,7 @@ These instructions apply to all coding agents working in this repository.
 - `quantizePng` retains APNG timing, plays, and separate fallback images. `animation.frames` contains full composited frame images; the preview aliases frame zero when it is the default image. Deduplicate transfer buffers, and convert every frame to native `ImageData` in browser workers.
 - APNG limits are 1,000 frames, 16,777,216 pixels per canvas, and 67,108,864 total canvas pixels including separate fallback images. Validate counts and sequences before allocating frames. Static PNG keeps its single decode path; the old low-level RGBA decoder intentionally returns the default image.
 - Save only the affected rectangle for APNG `PREVIOUS` disposal. Keep the WASM memory regression test so small delta frames do not add full-canvas scratch allocations.
+- Skip final-frame disposal work, and treat initial `PREVIOUS` as `BACKGROUND`; neither case needs a restoration snapshot.
 - Packed RGBA8 frames borrow the decoder buffer until composited; interlaced subframes with a wider canvas stride and other color types need owned normalization. Use safe byte views at the WASM/JS copy boundary, and keep returned arrays independent of WASM memory growth.
 - APNG decoding must reject ancillary CRC failures and invalid animation controls; the PNG decoder's tolerant defaults can otherwise silently accept corrupt frame data or report malformed APNG as static PNG.
 - `src/worker.ts` loads the WASM module and processes quantization messages outside the main thread.

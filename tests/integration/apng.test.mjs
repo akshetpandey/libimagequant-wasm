@@ -290,6 +290,31 @@ test('packed RGBA APNG decoding avoids a duplicate normalized frame allocation',
   assert(memory.buffer.byteLength <= 14 * 1024 * 1024, `${memory.buffer.byteLength} bytes used`);
 });
 
+test('a final previous-disposal frame does not allocate an unused restoration canvas', async () => {
+  const url = new URL('../../dist/wasm/libimagequant_wasm.js', import.meta.url);
+  url.searchParams.set('final-disposal-memory', 'fresh');
+  const raw = await import(url.href);
+  const { memory } = raw.initSync({
+    module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)),
+  });
+  const result = raw.decode_png_animation(
+    makeApng({
+      width: 1024,
+      height: 1024,
+      frames: [
+        {
+          samples: Array(1024 * 1024)
+            .fill(red)
+            .flat(),
+          dispose: 2,
+        },
+      ],
+    }),
+  );
+  assert.deepEqual([...result.imageData.data.subarray(-4)], red);
+  assert(memory.buffer.byteLength <= 14 * 1024 * 1024, `${memory.buffer.byteLength} bytes used`);
+});
+
 for (const fixture of [
   {
     name: 'one-bit indexed alpha',

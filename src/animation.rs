@@ -256,9 +256,18 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
         {
             return Err("APNG default animation frame must cover the canvas".into());
         }
+        // No later frame observes final disposal. Initially the canvas is
+        // transparent, so PREVIOUS is equivalent to BACKGROUND as APNG requires.
+        let disposal = if frames.len() + 1 == control.num_frames as usize {
+            DisposeOp::None
+        } else if frames.is_empty() && fc.dispose_op == DisposeOp::Previous {
+            DisposeOp::Background
+        } else {
+            fc.dispose_op
+        };
         // The PNG decoder has checked the rectangle bounds. PREVIOUS only needs
         // to save that rectangle, even when the output frame is a full canvas.
-        let previous = (fc.dispose_op == DisposeOp::Previous).then(|| {
+        let previous = (disposal == DisposeOp::Previous).then(|| {
             let mut saved = Vec::with_capacity(fc.width as usize * fc.height as usize);
             for y in 0..fc.height as usize {
                 let start = (y + fc.y_offset as usize) * width as usize + fc.x_offset as usize;
@@ -272,7 +281,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Option<Animation>, String> {
             delay_num: fc.delay_num,
             delay_den: fc.delay_den,
         });
-        match fc.dispose_op {
+        match disposal {
             DisposeOp::None => {}
             DisposeOp::Previous => {
                 for (y, row) in previous
