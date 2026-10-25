@@ -387,7 +387,7 @@ describe('LibImageQuant - Error handling', () => {
     const instance = createInstance();
     try {
       const garbage = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-      await expect(instance.quantizePng(garbage)).rejects.toThrow();
+      await expect(instance.quantizePng(garbage)).rejects.toThrow(/Failed to read PNG/);
     } finally {
       instance.dispose();
     }
@@ -397,7 +397,7 @@ describe('LibImageQuant - Error handling', () => {
     const instance = createInstance();
     try {
       const empty = new Uint8Array(0);
-      await expect(instance.quantizePng(empty)).rejects.toThrow();
+      await expect(instance.quantizePng(empty)).rejects.toThrow(/Failed to read PNG/);
     } finally {
       instance.dispose();
     }
