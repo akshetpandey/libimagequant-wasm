@@ -11,6 +11,19 @@ fn checked_integer(value: f64, min: u32, max: u32, name: &str) -> Result<u32, Js
     Ok(value as u32)
 }
 
+// Bound output allocations before reading PNG pixels or entering imagequant.
+// Quantization needs several copies/work buffers in addition to the RGBA image.
+const MAX_IMAGE_PIXELS: usize = 16_777_216;
+
+fn checked_dimensions(width: f64, height: f64) -> Result<(usize, usize, usize), JsValue> {
+    let w = checked_integer(width, 1, u32::MAX, "width")? as usize;
+    let h = checked_integer(height, 1, u32::MAX, "height")? as usize;
+    let pixels = w.checked_mul(h)
+        .filter(|&count| count <= MAX_IMAGE_PIXELS)
+        .ok_or_else(|| JsValue::from_str("Image exceeds the maximum of 16777216 pixels"))?;
+    Ok((w, h, pixels))
+}
+
 // Initialize panic hook for better error messages in development
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -61,21 +74,19 @@ impl ImageQuantizer {
     }
 
     #[wasm_bindgen(js_name = quantizeImage)]
-    pub fn quantize_image(&mut self, rgba_data: &Uint8ClampedArray, width: u32, height: u32) -> Result<QuantizationResult, JsValue> {
-        let data: Vec<u8> = rgba_data.to_vec();
-        let expected_len = (width as usize) * (height as usize) * 4;
-
-        if data.len() != expected_len {
+    pub fn quantize_image(&mut self, rgba_data: &Uint8ClampedArray, width: f64, height: f64) -> Result<QuantizationResult, JsValue> {
+        let (w, h, pixels) = checked_dimensions(width, height)?;
+        if rgba_data.length() as usize != pixels * 4 {
             return Err(JsValue::from_str("Image data length doesn't match width * height * 4"));
         }
 
         // Convert u8 data to RGBA array
-        let rgba_pixels: Vec<RGBA> = data
+        let rgba_pixels: Vec<RGBA> = rgba_data.to_vec()
             .chunks_exact(4)
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
 
-        let mut img = Image::new(&mut self.attr, rgba_pixels.into_boxed_slice(), width as usize, height as usize, 0.0)
+        let mut img = Image::new(&mut self.attr, rgba_pixels.into_boxed_slice(), w, h, 0.0)
             .map_err(|e| JsValue::from_str(&format!("Failed to create image: {:?}", e)))?;
 
         let result = self.attr.quantize(&mut img)
@@ -131,17 +142,13 @@ impl QuantizationResult {
     }
 
     #[wasm_bindgen(js_name = remapImage)]
-    pub fn remap_image(&mut self, rgba_data: &Uint8ClampedArray, width: u32, height: u32) -> Result<Uint8ClampedArray, JsValue> {
-        let data: Vec<u8> = rgba_data.to_vec();
-        let w = width as usize;
-        let h = height as usize;
-        let expected_len = w * h * 4;
-
-        if data.len() != expected_len {
+    pub fn remap_image(&mut self, rgba_data: &Uint8ClampedArray, width: f64, height: f64) -> Result<Uint8ClampedArray, JsValue> {
+        let (w, h, pixels) = checked_dimensions(width, height)?;
+        if rgba_data.length() as usize != pixels * 4 {
             return Err(JsValue::from_str("Image data length doesn't match width * height * 4"));
         }
 
-        let rgba_pixels: Vec<RGBA> = data
+        let rgba_pixels: Vec<RGBA> = rgba_data.to_vec()
             .chunks_exact(4)
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
@@ -180,17 +187,13 @@ impl QuantizationResult {
     }
 
     #[wasm_bindgen(js_name = getPaletteIndices)]
-    pub fn get_palette_indices(&mut self, rgba_data: &Uint8ClampedArray, width: u32, height: u32) -> Result<Uint8Array, JsValue> {
-        let data: Vec<u8> = rgba_data.to_vec();
-        let w = width as usize;
-        let h = height as usize;
-        let expected_len = w * h * 4;
-
-        if data.len() != expected_len {
+    pub fn get_palette_indices(&mut self, rgba_data: &Uint8ClampedArray, width: f64, height: f64) -> Result<Uint8Array, JsValue> {
+        let (w, h, pixels) = checked_dimensions(width, height)?;
+        if rgba_data.length() as usize != pixels * 4 {
             return Err(JsValue::from_str("Image data length doesn't match width * height * 4"));
         }
 
-        let rgba_pixels: Vec<RGBA> = data
+        let rgba_pixels: Vec<RGBA> = rgba_data.to_vec()
             .chunks_exact(4)
             .map(|chunk| RGBA::new(chunk[0], chunk[1], chunk[2], chunk[3]))
             .collect();
@@ -226,7 +229,9 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
     let mut reader = decoder.read_info()
         .map_err(|e| JsValue::from_str(&format!("Failed to read PNG info: {}", e)))?;
     
-    // Allocate the output buffer.
+    checked_dimensions(reader.info().width as f64, reader.info().height as f64)?;
+
+    // Allocate the output buffer only after bounding the normalized RGBA size.
     let mut buf = vec![0; reader.output_buffer_size()
         .ok_or_else(|| JsValue::from_str("PNG output buffer size overflow"))?];
     
@@ -276,14 +281,13 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, width: u32, height: u32) -> Result<Uint8Array, JsValue> {
-    let indices: Vec<u8> = palette_indices.to_vec();
-    let pixel_count = (width as usize) * (height as usize);
-
-    if indices.len() != pixel_count {
+pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, width: f64, height: f64) -> Result<Uint8Array, JsValue> {
+    let (w, h, pixel_count) = checked_dimensions(width, height)?;
+    if palette_indices.length() as usize != pixel_count {
         return Err(JsValue::from_str("Palette indices length doesn't match width * height"));
     }
     
+    let indices = palette_indices.to_vec();
     // Convert JS palette to Vec<RGBA>
     let mut palette_colors = Vec::new();
     for i in 0..palette.length() {
@@ -315,7 +319,7 @@ pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, widt
     
     let mut png_data = Vec::new();
     {
-        let mut encoder = Encoder::new(Cursor::new(&mut png_data), width, height);
+        let mut encoder = Encoder::new(Cursor::new(&mut png_data), w as u32, h as u32);
         encoder.set_color(ColorType::Indexed);
         encoder.set_depth(BitDepth::Eight);
         

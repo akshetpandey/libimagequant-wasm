@@ -199,6 +199,9 @@ export default class QuantizerClient<T extends RgbaImageData> {
       || !Number.isSafeInteger(length) || length !== imageData.data.length) {
       throw new Error('Image data dimensions must be positive integers matching the RGBA byte length');
     }
+    if (imageData.width * imageData.height > 16_777_216) {
+      throw new Error('Image exceeds the maximum of 16777216 pixels');
+    }
     const pixels = new Uint8ClampedArray(imageData.data);
     return this.sendMessage("quantize_imagedata", {
       imageData: pixels,

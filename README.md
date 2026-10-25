@@ -172,6 +172,10 @@ Inputs are copied before transfer to the worker; the library never detaches your
 buffers. Blob reading also runs in the worker and is covered by operation timeout
 and disposal. Output byte arrays are independently owned by each result.
 
+PNG and raw RGBA images are limited to 16,777,216 pixels (64 MiB of RGBA data).
+Oversized PNG headers are rejected before allocating the decoded image. Resize
+larger images before quantization; actual working memory exceeds the RGBA size.
+
 ### QuantizationOptions
 
 ```typescript
