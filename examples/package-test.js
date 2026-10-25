@@ -44,10 +44,9 @@ async function validatePackage() {
   console.log('\n📦 Package validation:', allFilesExist ? '✅ PASSED' : '❌ FAILED');
 
   if (allFilesExist) {
-    console.log('\n🎉 Package is ready for NPM publishing!');
-    console.log('\nNext steps:');
-    console.log('1. pnpm build (final build)');
-    console.log('2. pnpm publish (publish to NPM)');
+    console.log('\n🎉 Built package structure is valid.');
+    console.log('\nValidate the complete release: pnpm release <version> --dry-run');
+    console.log('Publish after validation: pnpm release <version>');
   } else {
     process.exitCode = 1;
   }

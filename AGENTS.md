@@ -23,6 +23,9 @@ These instructions apply to all coding agents working in this repository.
 - `pnpm test` — run the Vitest suite in headless Chromium against the built output. Run `pnpm build` first.
 - `pnpm test:watch` — run browser tests in watch mode.
 - `pnpm test:package` — validate the built package's required files.
+- `pnpm test:release` — test release safety against temporary real Git remotes, with npm publication simulated.
+- `pnpm release <version> --dry-run` — validate and pack a release without public mutations.
+- `pnpm release <version>` — run the validated release pipeline, atomically push main/tag, and publish the exact tarball to npm. Requires explicit publishing authorization.
 - `pnpm test:integration` — run built-artifact and package-consumer regression tests after building.
 - `cargo check --locked --target wasm32-unknown-unknown` — check the Rust WASM implementation.
 - `cargo test --locked` — run native Rust tests (browser tests exercise the WASM API).
@@ -52,6 +55,13 @@ These instructions apply to all coding agents working in this repository.
 - Oxlint enables TypeScript, Unicorn, Oxc, import, and promise rules; Node and Vitest plugins are scoped to their source/test files. Correctness and suspicious findings fail validation.
 - Keep the worker-specific exceptions: worker `postMessage` has no Window `targetOrigin`, owned transports use single callback properties, ambient declaration files need empty module exports, and Vite provides the virtual worker's default export.
 - Rust uses the pinned rustfmt/Clippy components. Keep lint checks read-only; use `pnpm format` explicitly to rewrite formatting.
+
+## Releases
+
+- Use `scripts/release.mjs` through `pnpm release`; versions in package.json, Cargo.toml, and Cargo.lock must match and be committed on main. The command supports stable versions and never bumps or force-tags automatically.
+- `releases/` contains ignored artifacts and integrity metadata. Integration tests use `RELEASE_TARBALL` when validating a release so they install the archive that will actually be published.
+- Run npm auth/publish commands outside the repository's pnpm-only devEngines. Use the documented subshell for login.
+- After a failed publication, retry at the same commit; preserve matching tags and inspect conflicts. Never move a published release tag.
 
 ## Validation and changes
 

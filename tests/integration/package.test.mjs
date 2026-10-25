@@ -208,7 +208,11 @@ for (const format of ['es', 'cjs']) {
 test('the packed package runs from a strict npm consumer installation', async () => {
   const repository = fileURLToPath(new URL('../../', import.meta.url));
   const { version } = JSON.parse(await readFile(join(repository, 'package.json'), 'utf8'));
-  await exec('pnpm', ['pack', '--pack-destination', directory], { cwd: repository });
+  let archive = process.env.RELEASE_TARBALL;
+  if (!archive) {
+    await exec('pnpm', ['pack', '--pack-destination', directory], { cwd: repository });
+    archive = join(directory, `libimagequant-wasm-${version}.tgz`);
+  }
   const consumer = join(directory, 'installed');
   await mkdir(consumer);
   await writeFile(
@@ -217,7 +221,7 @@ test('the packed package runs from a strict npm consumer installation', async ()
       private: true,
       type: 'module',
       dependencies: {
-        'libimagequant-wasm': `file:${join(directory, `libimagequant-wasm-${version}.tgz`)}`,
+        'libimagequant-wasm': `file:${archive}`,
       },
     }),
   );
