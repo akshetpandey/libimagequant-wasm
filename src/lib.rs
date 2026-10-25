@@ -4,6 +4,13 @@ use imagequant::{Attributes, Image, RGBA};
 use png::{Decoder, Encoder, ColorType, BitDepth, Transformations};
 use std::io::Cursor;
 
+fn checked_integer(value: f64, min: u32, max: u32, name: &str) -> Result<u32, JsValue> {
+    if !value.is_finite() || value.fract() != 0.0 || value < min as f64 || value > max as f64 {
+        return Err(JsValue::from_str(&format!("{} must be an integer between {} and {}", name, min, max)));
+    }
+    Ok(value as u32)
+}
+
 // Initialize panic hook for better error messages in development
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -25,25 +32,30 @@ impl ImageQuantizer {
     }
 
     #[wasm_bindgen(js_name = setSpeed)]
-    pub fn set_speed(&mut self, speed: i32) -> Result<(), JsValue> {
-        self.attr.set_speed(speed)
+    pub fn set_speed(&mut self, speed: f64) -> Result<(), JsValue> {
+        let speed = checked_integer(speed, 1, 10, "speed")?;
+        self.attr.set_speed(speed as i32)
             .map_err(|e| JsValue::from_str(&format!("Failed to set speed: {:?}", e)))
     }
 
     #[wasm_bindgen(js_name = setQuality)]
-    pub fn set_quality(&mut self, min: u8, target: u8) -> Result<(), JsValue> {
-        self.attr.set_quality(min, target)
+    pub fn set_quality(&mut self, min: f64, target: f64) -> Result<(), JsValue> {
+        let min = checked_integer(min, 0, 100, "minimum quality")?;
+        let target = checked_integer(target, 0, 100, "target quality")?;
+        self.attr.set_quality(min as u8, target as u8)
             .map_err(|e| JsValue::from_str(&format!("Failed to set quality: {:?}", e)))
     }
 
     #[wasm_bindgen(js_name = setMaxColors)]
-    pub fn set_max_colors(&mut self, colors: u32) -> Result<(), JsValue> {
+    pub fn set_max_colors(&mut self, colors: f64) -> Result<(), JsValue> {
+        let colors = checked_integer(colors, 2, 256, "maxColors")?;
         self.attr.set_max_colors(colors)
             .map_err(|e| JsValue::from_str(&format!("Failed to set max colors: {:?}", e)))
     }
 
     #[wasm_bindgen(js_name = setPosterization)]
     pub fn set_posterization(&mut self, posterization: f64) -> Result<(), JsValue> {
+        let posterization = checked_integer(posterization, 0, 4, "posterization")?;
         self.attr.set_min_posterization(posterization as u8)
             .map_err(|e| JsValue::from_str(&format!("Failed to set posterization: {:?}", e)))
     }
@@ -110,8 +122,11 @@ impl QuantizationResult {
     }
 
     #[wasm_bindgen(js_name = setDithering)]
-    pub fn set_dithering(&mut self, dithering_level: f32) -> Result<(), JsValue> {
-        self.result.set_dithering_level(dithering_level)
+    pub fn set_dithering(&mut self, dithering_level: f64) -> Result<(), JsValue> {
+        if !dithering_level.is_finite() || !(0.0..=1.0).contains(&dithering_level) {
+            return Err(JsValue::from_str("dithering must be between 0 and 1"));
+        }
+        self.result.set_dithering_level(dithering_level as f32)
             .map_err(|e| JsValue::from_str(&format!("Failed to set dithering: {:?}", e)))
     }
 

@@ -20,3 +20,32 @@ for (const fixture of png16) {
     }
   });
 }
+
+test('rejects numeric options before integer narrowing or rounding', () => {
+  const q = new wasm.ImageQuantizer();
+  try {
+    for (const value of [NaN, Infinity, -1, 1.5, 4294967300]) {
+      assert.throws(() => q.setSpeed(value));
+      assert.throws(() => q.setMaxColors(value));
+      assert.throws(() => q.setPosterization(value));
+    }
+    for (const value of [NaN, Infinity, -1, 1.5, 256, 356]) {
+      assert.throws(() => q.setQuality(value, 100));
+      assert.throws(() => q.setQuality(0, value));
+    }
+    assert.throws(() => q.setQuality(256, 356));
+    q.setQuality(0, 100);
+    q.setSpeed(1);
+    q.setSpeed(10);
+    q.setMaxColors(2);
+    q.setMaxColors(256);
+    q.setPosterization(0);
+    q.setPosterization(4);
+    const result = q.quantizeImage(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1);
+    try {
+      for (const value of [NaN, Infinity, -1, 1 + 1e-8]) assert.throws(() => result.setDithering(value));
+      result.setDithering(0);
+      result.setDithering(1);
+    } finally { result.free(); }
+  } finally { q.free(); }
+});
