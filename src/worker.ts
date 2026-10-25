@@ -26,15 +26,19 @@ self.onmessage = async function (
   const message = e.data;
 
   // Handle configuration message
-  if ("type" in message && message.type === "configure") {
+  if (message && typeof message === 'object' && "type" in message && message.type === "configure") {
     customWasmUrl = message.wasmUrl;
     return;
   }
 
   // Handle regular operation messages
-  const { id, action, data } = message as WorkerMessage;
+  const id = (message as WorkerMessage | null)?.id;
 
   try {
+    if (!message || typeof message !== 'object' || !Number.isSafeInteger(id) || !('data' in message) || !message.data) {
+      throw new Error('Invalid quantization request');
+    }
+    const { action, data } = message;
     // Ensure WASM is initialized
     const wasmModule = await loadWasm(customWasmUrl);
 

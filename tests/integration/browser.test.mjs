@@ -136,3 +136,25 @@ test('the CommonJS worker entry delegates to a working module worker', async () 
     palette: [[255, 0, 0, 255]], width: 1, height: 1,
   });
 });
+
+test('the exported browser worker survives malformed requests', async () => {
+  assert.deepEqual(await page.evaluate(async () => {
+    const worker = new Worker('/dist/worker.mjs', { type: 'module' });
+    const next = () => new Promise((resolve, reject) => {
+      worker.onmessage = event => resolve(event.data);
+      worker.onerror = event => reject(new Error(event.message));
+    });
+    try {
+      await next();
+      const errors = [];
+      for (const message of [null, undefined, {}, { id: 7, action: 'quantize_imagedata', data: null }]) {
+        const pending = next();
+        worker.postMessage(message);
+        errors.push((await pending).error);
+      }
+      const pending = next();
+      worker.postMessage({ id: 1, action: 'quantize_imagedata', data: { imageData: [255,0,0,255], width: 1, height: 1 } });
+      return { errors, palette: (await pending).result.palette };
+    } finally { worker.terminate(); }
+  }), { errors: Array(4).fill('Invalid quantization request'), palette: [[255,0,0,255]] });
+});

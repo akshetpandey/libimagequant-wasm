@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
+import { once } from 'node:events';
 import Quantizer from 'libimagequant-wasm/node';
 import png16 from '../fixtures/png-16bit.json' with { type: 'json' };
 
@@ -140,4 +142,19 @@ test('malformed worker responses reject pending and subsequent operations', asyn
       await assert.rejects(q.quantizeImageData(image()), /Invalid worker response/);
     } finally { q.dispose(); }
   }
+});
+
+test('the exported Node worker survives malformed requests', async () => {
+  const worker = new Worker(new URL(import.meta.resolve('libimagequant-wasm/node-worker')), { execArgv: [] });
+  try {
+    assert.deepEqual((await once(worker, 'message'))[0], { type: 'ready' });
+    for (const message of [null, undefined, {}, { id: 7, action: 'quantize_imagedata', data: null }]) {
+      const response = once(worker, 'message');
+      worker.postMessage(message);
+      assert.match((await response)[0].error, /Invalid quantization request/);
+    }
+    const response = once(worker, 'message');
+    worker.postMessage({ id: 1, action: 'quantize_imagedata', data: { imageData: [255,0,0,255], width: 1, height: 1 } });
+    assert.deepEqual((await response)[0].result.palette, [[255,0,0,255]]);
+  } finally { await worker.terminate(); }
 });
