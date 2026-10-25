@@ -141,6 +141,11 @@ const quantizer = new LibImageQuant(options?: LibImageQuantOptions);
 | `initTimeout` | `number` | `10000` | Worker initialization timeout (ms) |
 | `operationTimeout` | `number` | `30000` | Per-operation timeout (ms) |
 
+Timeouts must be positive integers at most 2,147,483,647 ms. Initialization covers
+worker startup; WASM initialization is lazy and covered by the first operation's
+timeout. An operation timeout rejects that request without cancelling computation;
+call `dispose()` to terminate the worker and all queued work.
+
 #### Methods
 
 ##### `quantizePng(pngData, options?)`

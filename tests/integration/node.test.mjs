@@ -11,6 +11,16 @@ const cjs = createRequire(import.meta.url)('libimagequant-wasm/node');
 const png = Buffer.from(png16[0].base64, 'base64');
 const image = () => ({ data: new Uint8ClampedArray([255, 0, 0, 255]), width: 1, height: 1 });
 
+test('invalid timeout settings fail before creating a worker', () => {
+  for (const Q of [Quantizer, cjs]) {
+    for (const name of ['initTimeout', 'operationTimeout']) {
+      for (const value of [0, -1, 1.5, NaN, Infinity, 2147483648, '100']) {
+        assert.throws(() => new Q({ [name]: value }), new RegExp(`${name} must be an integer`));
+      }
+    }
+  }
+});
+
 for (const [format, Q] of [['ESM', Quantizer], ['CommonJS', cjs]]) {
   test(`${format} Node API quantizes Buffers and returns DOM-free RGBA`, async () => {
     const q = new Q();

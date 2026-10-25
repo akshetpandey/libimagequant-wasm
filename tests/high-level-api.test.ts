@@ -14,6 +14,14 @@ function createInstance(opts: Record<string, unknown> = {}) {
 }
 
 describe('LibImageQuant - Initialization', () => {
+  it('rejects timeout values that would wrap or expire immediately', () => {
+    for (const name of ['initTimeout', 'operationTimeout']) {
+      for (const value of [0, -1, NaN, Infinity, 2147483648]) {
+        expect(() => createInstance({ [name]: value })).toThrow(new RegExp(name));
+      }
+    }
+  });
+
   it('creates an instance and initializes without error', async () => {
     const instance = createInstance();
     try {

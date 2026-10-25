@@ -20,6 +20,14 @@ function isByteView(value: unknown): value is Uint8Array | Uint8ClampedArray {
     && ['[object Uint8Array]', '[object Uint8ClampedArray]'].includes(Object.prototype.toString.call(value));
 }
 
+function timeout(value: number | undefined, fallback: number, name: string): number {
+  const milliseconds = value ?? fallback;
+  if (!Number.isInteger(milliseconds) || milliseconds <= 0 || milliseconds > 0x7fffffff) {
+    throw new RangeError(`${name} must be an integer between 1 and 2147483647 milliseconds`);
+  }
+  return milliseconds;
+}
+
 export default class QuantizerClient<T extends RgbaImageData> {
   private worker: WorkerTransport | null = null;
   private disposed = false;
@@ -36,8 +44,8 @@ export default class QuantizerClient<T extends RgbaImageData> {
 
   constructor(options: LibImageQuantOptions, private workerFactory: () => WorkerTransport) {
     this.wasmUrl = options.wasmUrl;
-    this.initTimeout = options.initTimeout || 10000;
-    this.operationTimeout = options.operationTimeout || 30000;
+    this.initTimeout = timeout(options.initTimeout, 10000, 'initTimeout');
+    this.operationTimeout = timeout(options.operationTimeout, 30000, 'operationTimeout');
     this.initPromise = this.initialize();
     // Initialization can fail before a caller awaits an operation. Mark it as
     // handled now while preserving the rejected promise for subsequent callers.
