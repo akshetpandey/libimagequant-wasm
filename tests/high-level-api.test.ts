@@ -335,6 +335,28 @@ describe('LibImageQuant - QuantizationOptions', () => {
 });
 
 describe('LibImageQuant - dispose', () => {
+  it('settles operations waiting for initialization when disposed', async () => {
+    const url = URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' }));
+    const instance = createInstance({ workerUrl: url, initTimeout: 5000 });
+    try {
+      const operation = instance.quantizeImageData(createTestImageData(1, 1, 'solid-red'));
+      instance.dispose();
+      await expect(operation).rejects.toThrow('LibImageQuant disposed');
+    } finally { instance.dispose(); URL.revokeObjectURL(url); }
+  }, 1000);
+
+  it('rejects disposal races and subsequent operations after successful initialization', async () => {
+    const instance = createInstance({ operationTimeout: 5000 });
+    const data = createTestImageData(1, 1, 'solid-red');
+    try {
+      await instance.quantizeImageData(data);
+      const operation = instance.quantizeImageData(data);
+      instance.dispose();
+      await expect(operation).rejects.toThrow('LibImageQuant disposed');
+      await expect(instance.quantizeImageData(data)).rejects.toThrow('LibImageQuant disposed');
+    } finally { instance.dispose(); }
+  }, 1000);
+
   it('dispose during init rejects subsequent operations', async () => {
     const instance = createInstance();
     // Immediately dispose before init completes

@@ -57,6 +57,9 @@ interface PendingOperation {
 
 export default class LibImageQuant {
   private worker: Worker | null = null;
+  private disposed = false;
+  private initTimer?: ReturnType<typeof setTimeout>;
+  private rejectInitialization?: (error: Error) => void;
   private isReady: boolean = false;
   private pendingOperations = new Map<number, PendingOperation>();
   private operationCounter: number = 0;
@@ -84,6 +87,7 @@ export default class LibImageQuant {
     if (this.isReady) return;
 
     return new Promise((resolve, reject) => {
+      this.rejectInitialization = reject;
       try {
         let workerUrl;
         if (this.workerUrl) {
@@ -93,18 +97,15 @@ export default class LibImageQuant {
         }
         this.worker = new Worker(workerUrl, { type: "module" });
 
-        const initTimer = setTimeout(() => {
-          if (!this.isReady) {
-            // Suppress further worker errors after timeout
-            if (this.worker) this.worker.onerror = null;
-            reject(new Error("Worker initialization timeout"));
-          }
+        this.initTimer = setTimeout(() => {
+          this.shutdown(new Error("Worker initialization timeout"));
         }, this.initTimeout);
 
         this.worker.onmessage = (e) => {
           const { type, id, success, result, error } = e.data;
 
           if (type === "ready") {
+            if (this.disposed) return;
             // Send WASM URL configuration to worker if provided
             if (this.wasmUrl) {
               this.worker?.postMessage({
@@ -113,7 +114,9 @@ export default class LibImageQuant {
               });
             }
             this.isReady = true;
-            clearTimeout(initTimer);
+            clearTimeout(this.initTimer);
+            this.initTimer = undefined;
+            this.rejectInitialization = undefined;
             resolve();
             return;
           }
@@ -133,7 +136,7 @@ export default class LibImageQuant {
 
         this.worker.onerror = (error) => {
           error.preventDefault();
-          clearTimeout(initTimer);
+          clearTimeout(this.initTimer);
           reject(new Error(`Worker error: ${error.message}`));
         };
       } catch (error) {
@@ -146,7 +149,9 @@ export default class LibImageQuant {
    * Send a message to the worker and return a promise
    */
   private async sendMessage(action: string, data: Record<string, unknown>): Promise<QuantizationResult> {
+    this.assertActive();
     await this.initPromise;
+    this.assertActive();
 
     return new Promise((resolve, reject) => {
       const id = ++this.operationCounter;
@@ -160,11 +165,13 @@ export default class LibImageQuant {
 
       this.pendingOperations.set(id, { resolve, reject, timer });
 
-      this.worker?.postMessage({
-        id,
-        action,
-        data,
-      });
+      try {
+        this.worker!.postMessage({ id, action, data });
+      } catch (error) {
+        this.pendingOperations.delete(id);
+        clearTimeout(timer);
+        reject(error);
+      }
     });
   }
 
@@ -211,18 +218,31 @@ export default class LibImageQuant {
    * Terminate the worker and clean up resources
    */
   dispose() {
-    // Reject all pending operations
-    for (const [, operation] of this.pendingOperations) {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.shutdown(new Error("LibImageQuant disposed"));
+  }
+
+  private assertActive() {
+    if (this.disposed) throw new Error("LibImageQuant disposed");
+  }
+
+  private shutdown(error: Error) {
+    clearTimeout(this.initTimer);
+    this.initTimer = undefined;
+    this.rejectInitialization?.(error);
+    this.rejectInitialization = undefined;
+    for (const operation of this.pendingOperations.values()) {
       clearTimeout(operation.timer);
-      operation.reject(new Error("LibImageQuant disposed"));
+      operation.reject(error);
     }
     this.pendingOperations.clear();
-
     if (this.worker) {
+      this.worker.onmessage = null;
+      this.worker.onerror = null;
       this.worker.terminate();
       this.worker = null;
     }
-
     this.isReady = false;
   }
 }
