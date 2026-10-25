@@ -127,3 +127,16 @@ test('Node rejects startup failures and unexpected worker exits promptly', async
     } finally { q.dispose(); }
   }
 });
+
+test('malformed worker responses reject pending and subsequent operations', async () => {
+  for (const response of ['null', "{ id: message.id, success: true }", "{ id: message.id, success: 'yes', result: {} }"]) {
+    const source = `import { parentPort } from 'node:worker_threads';
+      parentPort.on('message', message => parentPort.postMessage(${response}));
+      parentPort.postMessage({ type: 'ready' });`;
+    const q = new Quantizer({ workerUrl: new URL(`data:text/javascript,${encodeURIComponent(source)}`) });
+    try {
+      await assert.rejects(q.quantizeImageData(image()), /Invalid worker response/);
+      await assert.rejects(q.quantizeImageData(image()), /Invalid worker response/);
+    } finally { q.dispose(); }
+  }
+});

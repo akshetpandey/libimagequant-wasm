@@ -23,6 +23,7 @@ class ThreadTransport implements WorkerTransport {
     this.thread = new Worker(workerUrl ?? new URL('./node-worker.mjs', base), { execArgv: [] });
     this.thread.on('message', data => this.onmessage?.({ data }));
     this.thread.on('error', error => this.fail(error));
+    this.thread.on('messageerror', error => this.fail(error));
     this.thread.on('exit', code => this.fail(new Error(`Quantization worker exited (${code})`)));
   }
 

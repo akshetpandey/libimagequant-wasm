@@ -1,7 +1,7 @@
 import type { LibImageQuantOptions, QuantizationOptions, QuantizationResult, RgbaImageData, RgbaImageInput } from './types.js';
 
 export interface WorkerTransport {
-  onmessage: ((event: { data: { type?: string; id?: number; success?: boolean; result?: unknown; error?: string } }) => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
   onerror: ((error: { message?: string; preventDefault(): void }) => void) | null;
   postMessage(message: unknown, transfer?: ArrayBuffer[]): void;
   terminate(): unknown;
@@ -68,16 +68,22 @@ export default class QuantizerClient<T extends RgbaImageData> {
         }, this.initTimeout);
 
         this.worker.onmessage = (e) => {
-          const { type, id, success, result, error } = e.data;
+          if (!e.data || typeof e.data !== 'object') {
+            this.shutdown(new Error('Invalid worker response'));
+            return;
+          }
+          const { type, id, success, result, error } = e.data as Record<string, unknown>;
 
           if (type === "ready") {
-            if (this.disposed) return;
+            if (this.disposed || this.isReady) return;
             // Send WASM URL configuration to worker if provided
             if (this.wasmUrl) {
-              this.worker?.postMessage({
-                type: "configure",
-                wasmUrl: this.wasmUrl,
-              });
+              try {
+                this.worker?.postMessage({ type: 'configure', wasmUrl: this.wasmUrl });
+              } catch (error) {
+                this.shutdown(error instanceof Error ? error : new Error(String(error)));
+                return;
+              }
             }
             this.isReady = true;
             clearTimeout(this.initTimer);
@@ -91,13 +97,17 @@ export default class QuantizerClient<T extends RgbaImageData> {
 
           const operation = this.pendingOperations.get(id);
           if (operation) {
+            if (typeof success !== 'boolean' || (success && (!result || typeof result !== 'object'))) {
+              this.shutdown(new Error('Invalid worker response'));
+              return;
+            }
             this.pendingOperations.delete(id);
             clearTimeout(operation.timer);
 
             if (success) {
               operation.resolve(result as QuantizationResult<T>);
             } else {
-              operation.reject(new Error(error));
+              operation.reject(new Error(typeof error === 'string' ? error : 'Quantization failed'));
             }
           }
         };
@@ -108,7 +118,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
           this.shutdown(this.failure);
         };
       } catch (error) {
-        reject(error);
+        this.shutdown(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -213,6 +223,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
   }
 
   private shutdown(error: Error) {
+    this.failure ??= error;
     clearTimeout(this.initTimer);
     this.initTimer = undefined;
     this.rejectInitialization?.(error);

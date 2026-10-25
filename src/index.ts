@@ -23,11 +23,15 @@ export default class LibImageQuant extends QuantizerClient<ImageData> {
         terminate: () => {
           worker.onmessage = null;
           worker.onerror = null;
+          worker.onmessageerror = null;
           worker.terminate();
         },
       };
       worker.onmessage = event => transport.onmessage?.({ data: event.data });
       worker.onerror = error => transport.onerror?.(error);
+      worker.onmessageerror = event => transport.onerror?.({
+        message: 'Could not deserialize worker response', preventDefault: () => event.preventDefault(),
+      });
       return transport;
     });
   }
