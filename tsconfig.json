@@ -26,16 +26,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.cts",
-    "src/**/*.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "wasm-pkg",
-    "target",
-    "examples"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.cts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "wasm-pkg", "target", "examples"]
 }

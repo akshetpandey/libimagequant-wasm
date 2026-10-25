@@ -1,16 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import initWasm, {
   ImageQuantizer,
-  // @ts-expect-error - QuantizationResult is not directly constructible but is returned by quantizeImage
-  QuantizationResult,
   decode_png_to_rgba,
   encode_palette_to_png,
 } from '../dist/wasm/libimagequant_wasm.js';
-import {
-  createTestImageData,
-  createTestPng,
-  hasValidPngSignature,
-} from './helpers';
+import { createTestImageData, createTestPng, hasValidPngSignature } from './helpers';
 
 beforeAll(async () => {
   await initWasm();
@@ -106,15 +100,15 @@ describe('ImageQuantizer', () => {
   });
 });
 
-describe('QuantizationResult', () => {
-  function createQuantResult(width = 10, height = 10) {
-    const q = new ImageQuantizer();
-    const imageData = createTestImageData(width, height, 'gradient');
-    const result = q.quantizeImage(imageData.data, width, height);
-    q.free();
-    return { result, imageData };
-  }
+function createQuantResult(width = 10, height = 10) {
+  const q = new ImageQuantizer();
+  const imageData = createTestImageData(width, height, 'gradient');
+  const result = q.quantizeImage(imageData.data, width, height);
+  q.free();
+  return { result, imageData };
+}
 
+describe('QuantizationResult', () => {
   it('getPalette returns array of RGBA arrays', () => {
     const { result } = createQuantResult();
     try {
@@ -229,9 +223,9 @@ describe('decode_png_to_rgba', () => {
 
     // Every pixel should be red
     for (let i = 0; i < rgba.length; i += 4) {
-      expect(rgba[i]).toBe(255);     // R
-      expect(rgba[i + 1]).toBe(0);   // G
-      expect(rgba[i + 2]).toBe(0);   // B
+      expect(rgba[i]).toBe(255); // R
+      expect(rgba[i + 1]).toBe(0); // G
+      expect(rgba[i + 2]).toBe(0); // B
       expect(rgba[i + 3]).toBe(255); // A
     }
   });
@@ -279,8 +273,8 @@ describe('encode_palette_to_png', () => {
     const height = 1;
     const indices = new Uint8Array([0, 1]);
     const palette = [
-      [255, 0, 0, 255],  // opaque
-      [0, 0, 255, 128],  // semi-transparent
+      [255, 0, 0, 255], // opaque
+      [0, 0, 255, 128], // semi-transparent
     ];
 
     const pngBytes = encode_palette_to_png(indices, palette, width, height);
@@ -341,7 +335,8 @@ describe('PNG encode/decode roundtrip', () => {
       for (let i = 0; i < decoded.length; i += 4) {
         const pixel = [decoded[i], decoded[i + 1], decoded[i + 2], decoded[i + 3]];
         const matchesPalette = palette.some(
-          (c: number[]) => c[0] === pixel[0] && c[1] === pixel[1] && c[2] === pixel[2] && c[3] === pixel[3]
+          (c: number[]) =>
+            c[0] === pixel[0] && c[1] === pixel[1] && c[2] === pixel[2] && c[3] === pixel[3],
         );
         expect(matchesPalette).toBe(true);
       }

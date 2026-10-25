@@ -17,8 +17,12 @@ export async function quantizePng(wasmModule: WasmModule, data: PngQuantizationD
   const { pngBytes, options = {} } = data;
 
   // Convert PNG bytes to Uint8Array
-  const pngData = pngBytes instanceof Blob ? new Uint8Array(await pngBytes.arrayBuffer())
-    : pngBytes instanceof Uint8Array ? pngBytes : new Uint8Array(pngBytes);
+  const pngData =
+    pngBytes instanceof Blob
+      ? new Uint8Array(await pngBytes.arrayBuffer())
+      : pngBytes instanceof Uint8Array
+        ? pngBytes
+        : new Uint8Array(pngBytes);
 
   // Decode PNG to RGBA
   const decodedResult = wasmModule.decode_png_to_rgba(pngData);
@@ -33,7 +37,8 @@ export async function quantizeImageData(wasmModule: WasmModule, data: ImageDataQ
   const { imageData, width, height, options = {} } = data;
 
   // Convert to Uint8ClampedArray
-  const rgbaData = imageData instanceof Uint8ClampedArray ? imageData : new Uint8ClampedArray(imageData);
+  const rgbaData =
+    imageData instanceof Uint8ClampedArray ? imageData : new Uint8ClampedArray(imageData);
 
   return await quantizeRgbaData(wasmModule, rgbaData, width, height, options);
 }
@@ -43,7 +48,7 @@ async function quantizeRgbaData(
   rgbaData: Uint8ClampedArray,
   width: number,
   height: number,
-  options: QuantizationOptions
+  options: QuantizationOptions,
 ) {
   // Create quantizer instance
   const quantizer = new wasmModule.ImageQuantizer();
@@ -98,12 +103,7 @@ async function quantizeRgbaData(
       }
 
       // Generate indexed PNG
-      const pngBytes = wasmModule.encode_palette_to_png(
-        paletteIndices,
-        palette,
-        width,
-        height
-      );
+      const pngBytes = wasmModule.encode_palette_to_png(paletteIndices, palette, width, height);
 
       // Generate ImageData
       const imageData = { data: remappedData, width, height };
@@ -124,4 +124,3 @@ async function quantizeRgbaData(
     quantizer.free();
   }
 }
-

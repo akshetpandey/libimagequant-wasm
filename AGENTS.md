@@ -16,6 +16,9 @@ These instructions apply to all coding agents working in this repository.
 - `pnpm build` — clean and build WASM, ESM, CommonJS, source maps, and TypeScript declarations into `dist/`.
 - `pnpm build:wasm` — build WASM into `pkg/` and copy the four public raw assets into `dist/wasm/`. Run the full build to refresh embedded worker bundles.
 - `pnpm build:types` — generate TypeScript declarations.
+- `pnpm format` — format with oxfmt and rustfmt. Generated output and lockfiles are excluded from oxfmt.
+- `pnpm format:check` — check formatting without writing.
+- `pnpm lint` — run formatting checks, oxlint, Clippy for native and WASM targets, and TypeScript checks.
 - `pnpm typecheck` — check TypeScript without emitting files.
 - `pnpm test` — run the Vitest suite in headless Chromium against the built output. Run `pnpm build` first.
 - `pnpm test:watch` — run browser tests in watch mode.
@@ -42,6 +45,13 @@ These instructions apply to all coding agents working in this repository.
 - `vite.config.ts` embeds a self-contained browser worker and builds browser and Node entries separately with their appropriate platform targets. It assembles ESM, CommonJS, source maps, and raw WASM assets in `dist/`.
 - `tests/` covers the high-level API, low-level WASM exports, output integrity, color accuracy, and transparency using real WASM in a browser, plus Node worker lifecycle, production bundles, strict declaration consumers, and installed package artifacts.
 - `examples/` contains manual browser examples, the runnable Node PNG converter (`node examples/node.mjs input.png output.png`), and the package structure validator.
+
+## Formatting and linting
+
+- Use oxfmt and oxlint through the pinned pnpm toolchain. Do not add a second JavaScript formatter or linter.
+- Oxlint enables TypeScript, Unicorn, Oxc, import, and promise rules; Node and Vitest plugins are scoped to their source/test files. Correctness and suspicious findings fail validation.
+- Keep the worker-specific exceptions: worker `postMessage` has no Window `targetOrigin`, owned transports use single callback properties, ambient declaration files need empty module exports, and Vite provides the virtual worker's default export.
+- Rust uses the pinned rustfmt/Clippy components. Keep lint checks read-only; use `pnpm format` explicitly to rewrite formatting.
 
 ## Validation and changes
 

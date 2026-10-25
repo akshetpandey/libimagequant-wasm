@@ -9,8 +9,14 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.mjs" },
-      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
       "default": "./dist/index.mjs"
     },
     "./worker": {
@@ -20,8 +26,14 @@
       "default": "./dist/worker.mjs"
     },
     "./node": {
-      "import": { "types": "./dist/node.d.ts", "default": "./dist/node.mjs" },
-      "require": { "types": "./dist/node.d.cts", "default": "./dist/node.cjs" }
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.mjs"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
     },
     "./node-worker": "./dist/node-worker.mjs",
     "./wasm/libimagequant_wasm.js": {
@@ -33,7 +45,10 @@
       "default": "./dist/wasm/libimagequant_wasm_bg.wasm"
     }
   },
-  "sideEffects": ["./dist/worker.mjs", "./dist/worker.cjs"],
+  "sideEffects": [
+    "./dist/worker.mjs",
+    "./dist/worker.cjs"
+  ],
   "files": [
     "dist/",
     "README.md",
@@ -53,7 +68,12 @@
     "test:package": "node examples/package-test.js",
     "test:integration": "node --test tests/integration/*.test.mjs",
     "prepublishOnly": "pnpm build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "pnpm format:check && pnpm lint:js && pnpm lint:rust && pnpm typecheck",
+    "lint:js": "oxlint --deny-warnings .",
+    "lint:rust": "cargo clippy --locked --all-targets --target wasm32-unknown-unknown -- -D warnings && cargo clippy --locked --all-targets -- -D warnings",
+    "format": "oxfmt --write . && cargo fmt --all",
+    "format:check": "oxfmt --check . && cargo fmt --all -- --check"
   },
   "keywords": [
     "wasm",
@@ -76,6 +96,8 @@
     "@types/node": "^24.19.2",
     "@vitest/browser": "^5.0.5",
     "@vitest/browser-playwright": "^5.0.5",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
     "playwright": "^1.64.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",

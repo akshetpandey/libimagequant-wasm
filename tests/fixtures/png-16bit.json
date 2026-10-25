@@ -2,41 +2,21 @@
   {
     "name": "rgba",
     "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABEAYAAABPhRjKAAAAEElEQVR4nGP4/58BCP7/BwAR9wP9pESpxAAAAABJRU5ErkJggg==",
-    "expected": [
-      255,
-      0,
-      0,
-      255
-    ]
+    "expected": [255, 0, 0, 255]
   },
   {
     "name": "rgb",
     "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABEAIAAADA54+dAAAADUlEQVR4nGP4/58BCAAK/AH/E8mFCQAAAABJRU5ErkJggg==",
-    "expected": [
-      255,
-      0,
-      0,
-      255
-    ]
+    "expected": [255, 0, 0, 255]
   },
   {
     "name": "grayscale",
     "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABEAAAAABq7kcWAAAAC0lEQVR4nGP4/x8AAwAB//wl3FEAAAAASUVORK5CYII=",
-    "expected": [
-      255,
-      255,
-      255,
-      255
-    ]
+    "expected": [255, 255, 255, 255]
   },
   {
     "name": "grayscale-alpha",
     "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABEAQAAADljNBBAAAADUlEQVR4nGP4/7+BAQAH/gJ/ct2ANQAAAABJRU5ErkJggg==",
-    "expected": [
-      255,
-      255,
-      255,
-      128
-    ]
+    "expected": [255, 255, 255, 128]
   }
 ]

@@ -5,7 +5,9 @@ import * as wasm from '../../dist/wasm/libimagequant_wasm.js';
 import png16 from '../fixtures/png-16bit.json' with { type: 'json' };
 import { crc32 } from 'node:zlib';
 
-wasm.initSync({ module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)) });
+wasm.initSync({
+  module: await readFile(new URL('../../dist/wasm/libimagequant_wasm_bg.wasm', import.meta.url)),
+});
 
 for (const fixture of png16) {
   test(`normalizes 16-bit ${fixture.name} PNGs to RGBA8`, () => {
@@ -44,19 +46,30 @@ test('rejects numeric options before integer narrowing or rounding', () => {
     q.setPosterization(4);
     const result = q.quantizeImage(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1);
     try {
-      for (const value of [NaN, Infinity, -1, 1 + 1e-8]) assert.throws(() => result.setDithering(value));
+      for (const value of [NaN, Infinity, -1, 1 + 1e-8])
+        assert.throws(() => result.setDithering(value));
       result.setDithering(0);
       result.setDithering(1);
-    } finally { result.free(); }
-  } finally { q.free(); }
+    } finally {
+      result.free();
+    }
+  } finally {
+    q.free();
+  }
 });
 
 test('rejects PNG palette indices without a corresponding color', () => {
   const palette = [[255, 0, 0, 255]];
   for (const index of [1, 255]) {
-    assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([index]), palette, 1, 1), /outside the palette/);
+    assert.throws(
+      () => wasm.encode_palette_to_png(new Uint8Array([index]), palette, 1, 1),
+      /outside the palette/,
+    );
   }
-  assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([0]), [], 1, 1), /at least one color/);
+  assert.throws(
+    () => wasm.encode_palette_to_png(new Uint8Array([0]), [], 1, 1),
+    /at least one color/,
+  );
   const png = wasm.encode_palette_to_png(new Uint8Array([0]), palette, 1, 1);
   assert.deepEqual([...wasm.decode_png_to_rgba(png)[0]], palette[0]);
 });
@@ -67,16 +80,25 @@ test('rejects dimensions before WASM integer conversion and allocation', () => {
   const result = q.quantizeImage(rgba, 1, 1);
   try {
     for (const value of [0, -1, NaN, Infinity, 1.5, 4294967297]) {
-      for (const [width, height] of [[value, 1], [1, value]]) {
+      for (const [width, height] of [
+        [value, 1],
+        [1, value],
+      ]) {
         assert.throws(() => q.quantizeImage(rgba, width, height), /width|height/);
         assert.throws(() => result.remapImage(rgba, width, height), /width|height/);
         assert.throws(() => result.getPaletteIndices(rgba, width, height), /width|height/);
-        assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([0]), [[255,0,0,255]], width, height), /width|height/);
+        assert.throws(
+          () => wasm.encode_palette_to_png(new Uint8Array([0]), [[255, 0, 0, 255]], width, height),
+          /width|height/,
+        );
       }
     }
     assert.throws(() => q.quantizeImage(new Uint8ClampedArray(), 65536, 65536), /maximum.*pixels/);
     assert.deepEqual(result.getPalette(), [[255, 0, 0, 255]]);
-  } finally { result.free(); q.free(); }
+  } finally {
+    result.free();
+    q.free();
+  }
 
   // A tiny file claiming a huge image must fail before allocating its output.
   const png = Buffer.from(png16[0].base64, 'base64');
@@ -91,9 +113,15 @@ test('PNG encoding rejects invalid palette channels instead of changing colors',
     for (let channel = 0; channel < 4; channel++) {
       const color = [255, 0, 0, 255];
       color[channel] = value;
-      assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([0]), [color], 1, 1), /[Pp]alette channel/);
+      assert.throws(
+        () => wasm.encode_palette_to_png(new Uint8Array([0]), [color], 1, 1),
+        /[Pp]alette channel/,
+      );
     }
   }
   const palette = [[0, 255, 128, 0]];
-  assert.deepEqual([...wasm.decode_png_to_rgba(wasm.encode_palette_to_png(new Uint8Array([0]), palette, 1, 1))[0]], palette[0]);
+  assert.deepEqual(
+    [...wasm.decode_png_to_rgba(wasm.encode_palette_to_png(new Uint8Array([0]), palette, 1, 1))[0]],
+    palette[0],
+  );
 });

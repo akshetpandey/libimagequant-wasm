@@ -22,7 +22,7 @@ describe('Color accuracy', () => {
   it('uses the final remapping palette for PNG and ImageData output', async () => {
     let seed = 17;
     const pixels = Uint8ClampedArray.from({ length: 64 * 64 * 4 }, (_, i) =>
-      i % 4 === 3 ? 255 : ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 24)
+      i % 4 === 3 ? 255 : (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 24,
     );
     const q = new ImageQuantizer();
     const instance = new LibImageQuant({ workerUrl: WORKER_URL });
@@ -34,7 +34,9 @@ describe('Color accuracy', () => {
         reference.setDithering(1);
         const expected = reference.remapImage(pixels, 64, 64);
         const result = await instance.quantizeImageData(new ImageData(pixels, 64, 64), {
-          speed: 3, maxColors: 8, dithering: 1,
+          speed: 3,
+          maxColors: 8,
+          dithering: 1,
         });
         expect(result.palette).toEqual(reference.getPalette());
         expect(result.imageData.data).toEqual(expected);
@@ -183,7 +185,8 @@ describe('ImageData output integrity', () => {
       for (let i = 0; i < data.length; i += 4) {
         const pixel = [data[i], data[i + 1], data[i + 2], data[i + 3]];
         const matchesPalette = result.palette.some(
-          (c: number[]) => c[0] === pixel[0] && c[1] === pixel[1] && c[2] === pixel[2] && c[3] === pixel[3]
+          (c: number[]) =>
+            c[0] === pixel[0] && c[1] === pixel[1] && c[2] === pixel[2] && c[3] === pixel[3],
         );
         expect(matchesPalette).toBe(true);
       }

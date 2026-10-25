@@ -29,9 +29,9 @@ repository's `devEngines` settings apply to contributors building this package.
 
 ## Quick Start
 
-| Environment | Import / require | Result pixels |
-|-------------|------------------|---------------|
-| Browser | `libimagequant-wasm` | Native `ImageData` |
+| Environment | Import / require          | Result pixels                                |
+| ----------- | ------------------------- | -------------------------------------------- |
+| Browser     | `libimagequant-wasm`      | Native `ImageData`                           |
 | Node.js 24+ | `libimagequant-wasm/node` | `{ data: Uint8ClampedArray, width, height }` |
 
 The root entry always selects the browser API. Choose `/node` explicitly in
@@ -153,13 +153,13 @@ For an app-only preload, override the worker environment explicitly with
 const quantizer = new LibImageQuant(options?: LibImageQuantOptions);
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `workerUrl` | Browser: `string`; Node: `URL` | bundled worker | Browser worker path or absolute Node worker URL |
-| `wasmUrl` | `string` | embedded WASM | Browser only: custom WASM directory or binary URL |
-| `workerEnv` | `Record<string, string \| undefined>` | copy of `process.env` | Node only: worker environment override |
-| `initTimeout` | `number` | `10000` | Worker initialization timeout (ms) |
-| `operationTimeout` | `number` | `30000` | Per-operation timeout (ms) |
+| Option             | Type                                  | Default               | Description                                       |
+| ------------------ | ------------------------------------- | --------------------- | ------------------------------------------------- |
+| `workerUrl`        | Browser: `string`; Node: `URL`        | bundled worker        | Browser worker path or absolute Node worker URL   |
+| `wasmUrl`          | `string`                              | embedded WASM         | Browser only: custom WASM directory or binary URL |
+| `workerEnv`        | `Record<string, string \| undefined>` | copy of `process.env` | Node only: worker environment override            |
+| `initTimeout`      | `number`                              | `10000`               | Worker initialization timeout (ms)                |
+| `operationTimeout` | `number`                              | `30000`               | Per-operation timeout (ms)                        |
 
 Timeouts must be positive integers at most 2,147,483,647 ms. Initialization covers
 worker startup; WASM initialization is lazy and covered by the first operation's
@@ -277,18 +277,21 @@ pnpm build
 
 ### Scripts
 
-| Script | Description |
-|--------|-------------|
-| `pnpm build` | Full build (WASM + TypeScript + types) |
-| `pnpm build:wasm` | Build WASM module only |
-| `pnpm build:types` | Generate TypeScript declarations only |
-| `pnpm typecheck` | Run TypeScript type checking |
-| `pnpm test` | Run tests (Vitest + headless Chromium; build first) |
-| `pnpm test:package` | Validate built package files |
-| `pnpm test:integration` | Run built-artifact and package-consumer regressions |
-| `pnpm test:watch` | Run tests in watch mode |
-| `pnpm dev` | Start Vite dev server |
-| `pnpm clean` | Remove build output |
+| Script                  | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| `pnpm build`            | Full build (WASM + TypeScript + types)                       |
+| `pnpm build:wasm`       | Build WASM module only                                       |
+| `pnpm build:types`      | Generate TypeScript declarations only                        |
+| `pnpm format`           | Format source, examples, documentation, and Rust             |
+| `pnpm format:check`     | Check oxfmt and Rust formatting without writing              |
+| `pnpm lint`             | Check formatting, oxlint, native/WASM Clippy, and TypeScript |
+| `pnpm typecheck`        | Run TypeScript type checking                                 |
+| `pnpm test`             | Run tests (Vitest + headless Chromium; build first)          |
+| `pnpm test:package`     | Validate built package files                                 |
+| `pnpm test:integration` | Run built-artifact and package-consumer regressions          |
+| `pnpm test:watch`       | Run tests in watch mode                                      |
+| `pnpm dev`              | Start Vite dev server                                        |
+| `pnpm clean`            | Remove build output                                          |
 
 All WASM builds use `scripts/build-wasm.mjs`, `--release`, `--target web`, and
 `--locked`. wasm-pack selects the wasm-bindgen CLI matching `Cargo.lock` and
@@ -324,6 +327,7 @@ cargo test --locked
 ```
 
 The test suite covers:
+
 - **High-level API** - `LibImageQuant` class, all input formats, options, disposal, concurrency, error handling
 - **Node and packaging** - Worker startup/exit, malformed messages, byte ownership, server bundling, and published declarations
 - **Low-level WASM** - `ImageQuantizer`, `QuantizationResult`, PNG encode/decode, memory management
@@ -352,6 +356,7 @@ node examples/node.mjs input.png output.png
 ```
 
 See `examples/test.html` for a complete working example with:
+
 - File upload
 - Real-time parameter adjustment
 - Visual comparison
@@ -389,9 +394,11 @@ of that instance and create a new quantizer to recover. Always use `try/finally`
 for short-lived scripts so a live thread does not keep the process running.
 
 ### Browser Worker Loading Issues
+
 Ensure the worker module is served from the same origin, or pass a custom `workerUrl` to the constructor.
 
 ### WASM Loading Issues
+
 - Verify WebAssembly support: `typeof WebAssembly === 'object'`
 - Check browser console for loading errors
 - Ensure proper MIME type for `.wasm` files (`application/wasm`)
@@ -413,6 +420,7 @@ worker paths also respect `<base>`. Directory query parameters are forwarded to
 both the JavaScript loader and WASM binary.
 
 ### Performance Issues
+
 - Large images may take significant time to quantize
 - Consider resizing images before quantization
 - Use higher `speed` settings for real-time applications

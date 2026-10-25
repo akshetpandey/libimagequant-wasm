@@ -2,6 +2,7 @@
 /dist/
 /target/
 /pkg/
+/releases/
 
 # Node modules
 node_modules/

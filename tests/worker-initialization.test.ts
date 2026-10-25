@@ -16,14 +16,16 @@ test('concurrent first requests share one WASM initialization', async () => {
     const fetches = await new Promise<number>((resolve, reject) => {
       let count = 0;
       let completed = 0;
-      worker.onerror = event => reject(new Error(event.message));
+      worker.onerror = (event) => reject(new Error(event.message));
       worker.onmessage = ({ data }) => {
         if (data.type === 'wasm-fetch') count++;
         if (data.type === 'ready') {
-          for (let id = 1; id <= 5; id++) worker.postMessage({
-            id, action: 'quantize_imagedata',
-            data: { imageData: [255, 0, 0, 255], width: 1, height: 1 },
-          });
+          for (let id = 1; id <= 5; id++)
+            worker.postMessage({
+              id,
+              action: 'quantize_imagedata',
+              data: { imageData: [255, 0, 0, 255], width: 1, height: 1 },
+            });
         }
         if (data.id) {
           if (!data.success) reject(new Error(data.error));

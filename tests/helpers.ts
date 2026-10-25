@@ -6,7 +6,13 @@
 /** PNG file signature bytes */
 export const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
-export type ImageType = 'solid-red' | 'solid-blue' | 'gradient' | 'checkerboard' | 'four-quadrants' | 'transparent';
+export type ImageType =
+  | 'solid-red'
+  | 'solid-blue'
+  | 'gradient'
+  | 'checkerboard'
+  | 'four-quadrants'
+  | 'transparent';
 
 /**
  * Create an ImageData with a deterministic pattern.
@@ -67,7 +73,11 @@ export function createTestImageData(width: number, height: number, type: ImageTy
 /**
  * Create a PNG Uint8Array from an ImageData using OffscreenCanvas.
  */
-export async function createTestPng(width: number, height: number, type: ImageType): Promise<Uint8Array> {
+export async function createTestPng(
+  width: number,
+  height: number,
+  type: ImageType,
+): Promise<Uint8Array> {
   const imageData = createTestImageData(width, height, type);
   const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d')!;
@@ -92,8 +102,12 @@ export function colorCloseTo(actual: number[], expected: number[], tolerance = 1
 /**
  * Check if a palette contains a color close to the expected one.
  */
-export function paletteContainsColor(palette: number[][], expected: number[], tolerance = 10): boolean {
-  return palette.some(color => colorCloseTo(color, expected, tolerance));
+export function paletteContainsColor(
+  palette: number[][],
+  expected: number[],
+  tolerance = 10,
+): boolean {
+  return palette.some((color) => colorCloseTo(color, expected, tolerance));
 }
 
 /**

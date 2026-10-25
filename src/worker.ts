@@ -1,32 +1,36 @@
 import { loadWasm } from './wasm.js';
-import { quantizePng, quantizeImageData, type PngQuantizationData, type ImageDataQuantizationData } from './quantize.js';
+import {
+  quantizePng,
+  quantizeImageData,
+  type PngQuantizationData,
+  type ImageDataQuantizationData,
+} from './quantize.js';
 
-type WorkerMessage = {
-  id: number;
-  action: 'quantize_png';
-  data: PngQuantizationData;
-} | {
-  id: number;
-  action: 'quantize_imagedata';
-  data: ImageDataQuantizationData;
-
-}
+type WorkerMessage =
+  | {
+      id: number;
+      action: 'quantize_png';
+      data: PngQuantizationData;
+    }
+  | {
+      id: number;
+      action: 'quantize_imagedata';
+      data: ImageDataQuantizationData;
+    };
 
 interface ConfigureMessage {
-  type: "configure";
+  type: 'configure';
   wasmUrl: string;
 }
 
 let customWasmUrl: string | undefined;
 
 // Message handler for worker
-self.onmessage = async function (
-  e: MessageEvent<WorkerMessage | ConfigureMessage>
-) {
+self.onmessage = async function (e: MessageEvent<WorkerMessage | ConfigureMessage>) {
   const message = e.data;
 
   // Handle configuration message
-  if (message && typeof message === 'object' && "type" in message && message.type === "configure") {
+  if (message && typeof message === 'object' && 'type' in message && message.type === 'configure') {
     customWasmUrl = message.wasmUrl;
     return;
   }
@@ -35,7 +39,13 @@ self.onmessage = async function (
   const id = (message as WorkerMessage | null)?.id;
 
   try {
-    if (!message || typeof message !== 'object' || !Number.isSafeInteger(id) || !('data' in message) || !message.data) {
+    if (
+      !message ||
+      typeof message !== 'object' ||
+      !Number.isSafeInteger(id) ||
+      !('data' in message) ||
+      !message.data
+    ) {
       throw new Error('Invalid quantization request');
     }
     const { action, data } = message;
@@ -45,10 +55,10 @@ self.onmessage = async function (
     let result;
 
     switch (action) {
-      case "quantize_png":
+      case 'quantize_png':
         result = await quantizePng(wasmModule, data);
         break;
-      case "quantize_imagedata":
+      case 'quantize_imagedata':
         result = await quantizeImageData(wasmModule, data);
         break;
       default:
@@ -58,11 +68,14 @@ self.onmessage = async function (
     result.imageData = new ImageData(result.imageData.data, result.width, result.height);
 
     // Send success response
-    self.postMessage({
-      id,
-      success: true,
-      result,
-    }, [result.pngBytes.buffer, result.imageData.data.buffer]);
+    self.postMessage(
+      {
+        id,
+        success: true,
+        result,
+      },
+      [result.pngBytes.buffer, result.imageData.data.buffer],
+    );
   } catch (error) {
     // Send error response
     self.postMessage({
@@ -74,4 +87,4 @@ self.onmessage = async function (
 };
 
 // Send ready message when worker is loaded
-self.postMessage({ type: "ready" });
+self.postMessage({ type: 'ready' });

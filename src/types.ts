@@ -54,4 +54,3 @@ export interface LibImageQuantOptions {
   /** Timeout for individual operations in milliseconds (default: 30000) */
   operationTimeout?: number;
 }
-

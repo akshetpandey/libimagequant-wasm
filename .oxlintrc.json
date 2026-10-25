@@ -1,0 +1,68 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "env": {
+    "browser": true
+  },
+  "ignorePatterns": ["dist/", "pkg/", "target/", "node_modules/", "releases/"],
+  "rules": {
+    "import/no-cycle": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-add-event-listener": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "scripts/**",
+        "tests/integration/**",
+        "tests/release.test.mjs",
+        "src/node.ts",
+        "src/node-worker.ts",
+        "*.config.ts",
+        "examples/node.mjs",
+        "examples/package-test.js"
+      ],
+      "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "node"],
+      "env": {
+        "node": true,
+        "browser": false
+      }
+    },
+    {
+      "files": ["tests/integration/browser.test.mjs"],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    },
+    {
+      "files": ["tests/**/*.test.ts"],
+      "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+      "rules": {
+        "vitest/no-focused-tests": "error",
+        "vitest/no-disabled-tests": "error"
+      }
+    },
+    {
+      "files": ["src/**/*.d.ts"],
+      "rules": {
+        "unicorn/require-module-specifiers": "off"
+      }
+    },
+    {
+      "files": [
+        "src/worker.ts",
+        "tests/worker-initialization.test.ts",
+        "tests/integration/browser.test.mjs",
+        "tests/integration/node.test.mjs"
+      ],
+      "rules": {
+        "unicorn/require-post-message-target-origin": "off"
+      }
+    }
+  ]
+}

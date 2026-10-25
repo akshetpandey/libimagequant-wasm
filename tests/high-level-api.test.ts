@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import LibImageQuant from '../dist/index.mjs';
-import type { QuantizationOptions, QuantizationResult } from '../dist/index.mjs';
-import {
-  createTestPng,
-  createTestImageData,
-  hasValidPngSignature,
-} from './helpers';
+import type { QuantizationResult } from '../dist/index.mjs';
+import { createTestPng, createTestImageData, hasValidPngSignature } from './helpers';
 
 const WORKER_URL = '/worker.mjs';
 
@@ -54,7 +50,7 @@ describe('LibImageQuant - Initialization', () => {
     // dispose to prevent leaked rejection after timeout
     instance.dispose();
     // Allow time for any async error handlers to settle
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
   it('reports initialization failures to operations started after the worker fails', async () => {
@@ -64,10 +60,10 @@ describe('LibImageQuant - Initialization', () => {
     });
     try {
       // Let initialization reject before attaching an operation's error handler.
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 600));
       const imageData = createTestImageData(4, 4, 'solid-red');
       await expect(instance.quantizeImageData(imageData)).rejects.toThrow(
-        /Worker (error|initialization timeout)/
+        /Worker (error|initialization timeout)/,
       );
     } finally {
       instance.dispose();
@@ -77,7 +73,11 @@ describe('LibImageQuant - Initialization', () => {
 
 describe('LibImageQuant - quantizePng', () => {
   it('rejects a pending Blob operation immediately on disposal', async () => {
-    class SlowBlob extends Blob { arrayBuffer(): Promise<ArrayBuffer> { return new Promise(() => {}); } }
+    class SlowBlob extends Blob {
+      arrayBuffer(): Promise<ArrayBuffer> {
+        return new Promise(() => {});
+      }
+    }
     const instance = createInstance();
     const pending = instance.quantizePng(new SlowBlob(['pending']));
     instance.dispose();
@@ -352,13 +352,18 @@ describe('LibImageQuant - QuantizationOptions', () => {
 
 describe('LibImageQuant - dispose', () => {
   it('settles operations waiting for initialization when disposed', async () => {
-    const url = URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' }));
+    const url = URL.createObjectURL(
+      new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' }),
+    );
     const instance = createInstance({ workerUrl: url, initTimeout: 5000 });
     try {
       const operation = instance.quantizeImageData(createTestImageData(1, 1, 'solid-red'));
       instance.dispose();
       await expect(operation).rejects.toThrow('LibImageQuant disposed');
-    } finally { instance.dispose(); URL.revokeObjectURL(url); }
+    } finally {
+      instance.dispose();
+      URL.revokeObjectURL(url);
+    }
   }, 1000);
 
   it('rejects disposal races and subsequent operations after successful initialization', async () => {
@@ -370,7 +375,9 @@ describe('LibImageQuant - dispose', () => {
       instance.dispose();
       await expect(operation).rejects.toThrow('LibImageQuant disposed');
       await expect(instance.quantizeImageData(data)).rejects.toThrow('LibImageQuant disposed');
-    } finally { instance.dispose(); }
+    } finally {
+      instance.dispose();
+    }
   }, 1000);
 
   it('dispose during init rejects subsequent operations', async () => {
@@ -422,22 +429,31 @@ describe('LibImageQuant - Concurrent operations', () => {
 
 describe('LibImageQuant - Error handling', () => {
   it('rejects pending and future operations when a ready worker crashes', async () => {
-    const url = URL.createObjectURL(new Blob([
-      `self.onmessage = () => setTimeout(() => { throw new Error('crash fixture'); }, 0);
+    const url = URL.createObjectURL(
+      new Blob(
+        [
+          `self.onmessage = () => setTimeout(() => { throw new Error('crash fixture'); }, 0);
        self.postMessage({ type: 'ready' });`,
-    ], { type: 'text/javascript' }));
+        ],
+        { type: 'text/javascript' },
+      ),
+    );
     const instance = createInstance({ workerUrl: url, operationTimeout: 5000 });
     const data = createTestImageData(1, 1, 'solid-red');
     try {
       const results = await Promise.allSettled([
-        instance.quantizeImageData(data), instance.quantizeImageData(data),
+        instance.quantizeImageData(data),
+        instance.quantizeImageData(data),
       ]);
       for (const result of results) {
         expect(result.status).toBe('rejected');
         if (result.status === 'rejected') expect(result.reason.message).toMatch(/Worker error:/);
       }
       await expect(instance.quantizeImageData(data)).rejects.toThrow(/Worker error:/);
-    } finally { instance.dispose(); URL.revokeObjectURL(url); }
+    } finally {
+      instance.dispose();
+      URL.revokeObjectURL(url);
+    }
   }, 1000);
 
   it('rejects on invalid PNG data', async () => {
