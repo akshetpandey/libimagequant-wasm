@@ -105,7 +105,7 @@ pub struct QuantizationResult {
 
 #[wasm_bindgen]
 impl QuantizationResult {
-    #[wasm_bindgen(js_name = getPalette)]
+    #[wasm_bindgen(js_name = getPalette, unchecked_return_type = "number[][]")]
     pub fn get_palette(&mut self) -> Array {
         let palette = self.result.palette();
         let js_palette = Array::new();
@@ -141,7 +141,7 @@ impl QuantizationResult {
             .map_err(|e| JsValue::from_str(&format!("Failed to set dithering: {:?}", e)))
     }
 
-    #[wasm_bindgen(js_name = remapImage)]
+    #[wasm_bindgen(js_name = remapImage, unchecked_return_type = "Uint8ClampedArray<ArrayBuffer>")]
     pub fn remap_image(&mut self, rgba_data: &Uint8ClampedArray, width: f64, height: f64) -> Result<Uint8ClampedArray, JsValue> {
         let (w, h, pixels) = checked_dimensions(width, height)?;
         if rgba_data.length() as usize != pixels * 4 {
@@ -186,7 +186,7 @@ impl QuantizationResult {
         Ok(Uint8ClampedArray::from(&result_data[..]))
     }
 
-    #[wasm_bindgen(js_name = getPaletteIndices)]
+    #[wasm_bindgen(js_name = getPaletteIndices, unchecked_return_type = "Uint8Array<ArrayBuffer>")]
     pub fn get_palette_indices(&mut self, rgba_data: &Uint8ClampedArray, width: f64, height: f64) -> Result<Uint8Array, JsValue> {
         let (w, h, pixels) = checked_dimensions(width, height)?;
         if rgba_data.length() as usize != pixels * 4 {
@@ -218,7 +218,7 @@ impl QuantizationResult {
 }
 
 // PNG helper functions
-#[wasm_bindgen]
+#[wasm_bindgen(unchecked_return_type = "[Uint8ClampedArray<ArrayBuffer>, number, number]")]
 pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
     let data: Vec<u8> = png_bytes.to_vec();
     let cursor = Cursor::new(data);
@@ -280,7 +280,7 @@ pub fn decode_png_to_rgba(png_bytes: &Uint8Array) -> Result<Array, JsValue> {
     Ok(result)
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(unchecked_return_type = "Uint8Array<ArrayBuffer>")]
 pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, width: f64, height: f64) -> Result<Uint8Array, JsValue> {
     let (w, h, pixel_count) = checked_dimensions(width, height)?;
     if palette_indices.length() as usize != pixel_count {

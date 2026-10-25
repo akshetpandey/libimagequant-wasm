@@ -64,8 +64,8 @@ test('browser results can be saved directly as a Blob with strict TypeScript', a
     console.log(blob, image);`);
 });
 
-test('raw WASM declarations retain native browser WebAssembly types', async () => {
-  await typecheck(`import init, { initSync } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
+test('raw WASM declarations retain native browser WebAssembly and owned buffer types', async () => {
+  await typecheck(`import init, { initSync, ImageQuantizer, encode_palette_to_png, decode_png_to_rgba } from 'libimagequant-wasm/wasm/libimagequant_wasm.js';
     import type * as Binary from 'libimagequant-wasm/wasm/libimagequant_wasm_bg.wasm';
     const bytes = new Uint8Array();
     const module = new WebAssembly.Module(bytes);
@@ -74,6 +74,17 @@ test('raw WASM declarations retain native browser WebAssembly types', async () =
     const memory: WebAssembly.Memory = sync.memory;
     const rawMemory: typeof Binary.memory = memory;
     const table: WebAssembly.Table = async.__wbindgen_externrefs;
+    const [pixels, width, height] = decode_png_to_rgba(bytes);
+    const q = new ImageQuantizer();
+    try {
+      const result = q.quantizeImage(pixels, width, height);
+      try {
+        const image = new ImageData(result.remapImage(pixels, width, height), width, height);
+        const png = encode_palette_to_png(result.getPaletteIndices(pixels, width, height), result.getPalette(), width, height);
+        const blob = new Blob([png], { type: 'image/png' });
+        console.log(image, blob);
+      } finally { result.free(); }
+    } finally { q.free(); }
     console.log(rawMemory, table);`);
 });
 
