@@ -70,7 +70,9 @@ test('browser transfers preserve caller buffers and accept iframe byte views', a
     const data = new frame.contentWindow.Uint8ClampedArray([255, 0, 0, 255]);
     const q = new Quantizer();
     try {
-      const pending = q.quantizeImageData({ data, width: 1, height: 1 });
+      const options = { maxColors: 4 };
+      const pending = q.quantizeImageData({ data, width: 1, height: 1 }, options);
+      options.maxColors = 0;
       data.fill(0);
       const result = await pending;
       return { palette: result.palette, inputLength: data.byteLength, native: result.imageData instanceof ImageData };

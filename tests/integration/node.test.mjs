@@ -66,6 +66,22 @@ test('Node shares cold initialization and keeps concurrent results independent',
   } finally { q.dispose(); }
 });
 
+test('concurrent calls snapshot reused options before waiting for initialization', async () => {
+  const q = new Quantizer();
+  const pixels = { width: 2, height: 2, data: new Uint8Array([255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255]) };
+  const options = { maxColors: 2, quality: { min: 0, target: 100 } };
+  try {
+    const first = q.quantizeImageData(pixels, options);
+    options.maxColors = 4;
+    const second = q.quantizeImageData(pixels, options);
+    options.maxColors = 0;
+    options.quality.target = -1;
+    const results = await Promise.all([first, second]);
+    assert.equal(results[0].paletteLength, 2);
+    assert.equal(results[1].paletteLength, 4);
+  } finally { q.dispose(); }
+});
+
 test('Node preserves errors and permits valid requests after rejected input', async () => {
   const q = new Quantizer();
   try {

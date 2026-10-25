@@ -178,7 +178,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
 
     return this.sendMessage("quantize_png", {
       pngBytes,
-      options,
+      options: structuredClone(options),
     }, pngBytes instanceof Uint8Array ? [pngBytes.buffer] : []);
   }
 
@@ -207,7 +207,7 @@ export default class QuantizerClient<T extends RgbaImageData> {
       imageData: pixels,
       width: imageData.width,
       height: imageData.height,
-      options,
+      options: structuredClone(options),
     }, [pixels.buffer]);
   }
 
