@@ -287,6 +287,12 @@ pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, widt
         return Err(JsValue::from_str("Palette indices length doesn't match width * height"));
     }
     
+    if palette.length() == 0 {
+        return Err(JsValue::from_str("Palette must contain at least one color"));
+    }
+    if palette.length() > 256 {
+        return Err(JsValue::from_str("Palette too large for PNG (max 256 colors)"));
+    }
     let indices = palette_indices.to_vec();
     // Convert JS palette to Vec<RGBA>
     let mut palette_colors = Vec::new();
@@ -294,11 +300,13 @@ pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, widt
         let color = palette.get(i);
         if let Ok(color_array) = color.dyn_into::<Array>() {
             if color_array.length() >= 4 {
-                let r = color_array.get(0).as_f64().unwrap_or(0.0) as u8;
-                let g = color_array.get(1).as_f64().unwrap_or(0.0) as u8;
-                let b = color_array.get(2).as_f64().unwrap_or(0.0) as u8;
-                let a = color_array.get(3).as_f64().unwrap_or(255.0) as u8;
-                palette_colors.push([r, g, b, a]);
+                let mut rgba = [0u8; 4];
+                for (channel, value) in rgba.iter_mut().enumerate() {
+                    let number = color_array.get(channel as u32).as_f64()
+                        .ok_or_else(|| JsValue::from_str("Palette channels must be numbers"))?;
+                    *value = checked_integer(number, 0, 255, "palette channel")? as u8;
+                }
+                palette_colors.push(rgba);
             } else {
                 return Err(JsValue::from_str("Invalid palette color format"));
             }
@@ -307,12 +315,6 @@ pub fn encode_palette_to_png(palette_indices: &Uint8Array, palette: &Array, widt
         }
     }
     
-    if palette_colors.len() > 256 {
-        return Err(JsValue::from_str("Palette too large for PNG (max 256 colors)"));
-    }
-    if palette_colors.is_empty() {
-        return Err(JsValue::from_str("Palette must contain at least one color"));
-    }
     if indices.iter().any(|&index| index as usize >= palette_colors.len()) {
         return Err(JsValue::from_str("Palette index is outside the palette"));
     }

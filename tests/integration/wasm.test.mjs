@@ -85,3 +85,15 @@ test('rejects dimensions before WASM integer conversion and allocation', () => {
   png.writeUInt32BE(crc32(png.subarray(12, 29)), 29);
   assert.throws(() => wasm.decode_png_to_rgba(png), /maximum.*pixels/);
 });
+
+test('PNG encoding rejects invalid palette channels instead of changing colors', () => {
+  for (const value of [NaN, Infinity, -1, 256, 1.5, '2', null, undefined]) {
+    for (let channel = 0; channel < 4; channel++) {
+      const color = [255, 0, 0, 255];
+      color[channel] = value;
+      assert.throws(() => wasm.encode_palette_to_png(new Uint8Array([0]), [color], 1, 1), /[Pp]alette channel/);
+    }
+  }
+  const palette = [[0, 255, 128, 0]];
+  assert.deepEqual([...wasm.decode_png_to_rgba(wasm.encode_palette_to_png(new Uint8Array([0]), palette, 1, 1))[0]], palette[0]);
+});
