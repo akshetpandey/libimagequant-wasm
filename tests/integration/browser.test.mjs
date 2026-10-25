@@ -6,7 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { chromium } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
+
+const browserTypes = { chromium, firefox, webkit };
+const browserName = process.env.TEST_BROWSER ?? 'chromium';
+if (!Object.hasOwn(browserTypes, browserName)) {
+  throw new Error('TEST_BROWSER must be chromium, firefox, or webkit');
+}
+const browserType = browserTypes[browserName];
 
 let server, browser, page, consumer;
 const bundles = new Map();
@@ -54,7 +61,7 @@ before(async () => {
     }
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  browser = await chromium.launch({ headless: true });
+  browser = await browserType.launch({ headless: true });
   page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
 });

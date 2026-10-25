@@ -11,6 +11,8 @@ const wasmResolver = (): Plugin => ({
 });
 
 const worker = { format: 'es' as const, plugins: () => [wasmResolver()] };
+// Explicit versions keep the documented browser floor stable across Vite upgrades.
+const browserTargets = ['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4'];
 
 // Node and browser outputs need different platform handling for import.meta
 // and built-in modules. Stage them independently before assembling dist/.
@@ -21,21 +23,21 @@ async function buildAuxiliaryBundles() {
       formats: ['es', 'cjs'] as const,
       directory: 'node',
       platform: 'node' as const,
-      target: 'node24',
+      target: 'node22.12',
     },
     {
       entry: 'node-worker',
       formats: ['es'] as const,
       directory: 'node-worker',
       platform: 'node' as const,
-      target: 'node24',
+      target: 'node22.12',
     },
     {
       entry: 'index',
       formats: ['cjs'] as const,
       directory: 'browser-cjs',
       platform: 'browser' as const,
-      target: 'es2025',
+      target: browserTargets,
     },
   ]) {
     await buildVite({
@@ -89,7 +91,7 @@ export default defineConfig({
       formats: ['es'],
       fileName: (_format, entry) => `${entry}.mjs`,
     },
-    target: 'es2025',
+    target: browserTargets,
     minify: true,
     sourcemap: true,
   },

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "esnext",
-    "lib": ["esnext", "DOM", "WebWorker"],
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "WebWorker"],
     "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "bundler",

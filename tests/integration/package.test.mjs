@@ -20,8 +20,8 @@ async function typecheck(source, extension = 'mts', nodeOnly = false) {
       compilerOptions: {
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
-        target: 'ES2025',
-        lib: nodeOnly ? ['ES2025'] : ['ES2025', 'DOM'],
+        target: 'ES2022',
+        lib: nodeOnly ? ['ES2022'] : ['ES2022', 'DOM'],
         types: nodeOnly ? ['node'] : [],
         typeRoots: [fileURLToPath(new URL('../../node_modules/@types', import.meta.url))],
         strict: true,
@@ -171,6 +171,36 @@ for (const format of ['mts', 'cts']) {
   });
 }
 
+test('an externalized Vite SSR consumer runs without relocating the worker', async () => {
+  const entry = join(directory, 'server.mjs');
+  await writeFile(
+    entry,
+    `import Quantizer from 'libimagequant-wasm/node';
+    export async function run() {
+      const q = new Quantizer();
+      try {
+        return (await q.quantizeImageData({ data: new Uint8ClampedArray([255,0,0,255]), width:1, height:1 })).width;
+      } finally { q.dispose(); }
+    }`,
+  );
+  const outDir = join(directory, 'server');
+  await build({
+    configFile: false,
+    root: directory,
+    logLevel: 'silent',
+    ssr: { external: ['libimagequant-wasm'] },
+    build: {
+      ssr: entry,
+      target: 'node22.12',
+      outDir,
+      rolldownOptions: { output: { entryFileNames: 'server.mjs' } },
+    },
+  });
+  const { pathToFileURL } = await import('node:url');
+  const { run } = await import(pathToFileURL(join(outDir, 'server.mjs')));
+  assert.equal(await run(), 1);
+});
+
 for (const format of ['es', 'cjs']) {
   test(`a bundled Node ${format} consumer can locate the exported worker`, async () => {
     const entry = join(directory, `node-${format}.mjs`);
@@ -190,7 +220,7 @@ for (const format of ['es', 'cjs']) {
       logLevel: 'silent',
       build: {
         outDir,
-        target: 'node24',
+        target: 'node22.12',
         lib: { entry, formats: [format], fileName: () => `app.${format === 'es' ? 'mjs' : 'cjs'}` },
         rolldownOptions: { platform: 'node', external: [/^node:/] },
       },
