@@ -61,3 +61,13 @@ test('browser results can be saved directly as a Blob with strict TypeScript', a
     const image: ImageData = result.imageData;
     console.log(blob, image);`);
 });
+
+test('CommonJS declarations expose the constructor and named option types', async () => {
+  await typecheck(`import Quantizer = require('libimagequant-wasm');
+    import type { QuantizationOptions, QuantizationResult, LibImageQuantOptions } from 'libimagequant-wasm';
+    const settings: LibImageQuantOptions = { operationTimeout: 100 };
+    const options: QuantizationOptions = { maxColors: 4 };
+    const q = new Quantizer(settings);
+    const result: Promise<QuantizationResult> = q.quantizePng(new Uint8Array(), options);
+    q.dispose(); console.log(result);`, 'cts');
+});

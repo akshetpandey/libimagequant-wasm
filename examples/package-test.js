@@ -11,6 +11,7 @@ const filesToCheck = [
     'dist/worker.mjs',
     'dist/worker.cjs',
     'dist/index.d.ts',
+    'dist/index.d.cts',
     'dist/worker.d.ts',
     'dist/wasm/libimagequant_wasm.js',
     'dist/wasm/libimagequant_wasm_bg.wasm',
