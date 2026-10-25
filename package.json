@@ -26,7 +26,7 @@
     },
     "./wasm/libimagequant_wasm_bg.wasm": "./dist/wasm/libimagequant_wasm_bg.wasm"
   },
-  "sideEffects": false,
+  "sideEffects": ["./dist/worker.mjs", "./dist/worker.cjs"],
   "files": [
     "dist/",
     "README.md",
